@@ -1,0 +1,7 @@
+.env
+venv/
+output/
+__pycache__/
+*.mp4
+*.webm
+tmp_render_*.html
