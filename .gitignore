@@ -1,7 +1,37 @@
+# Environments
 .env
+.venv/
 venv/
-output/
+env/
+ENV/
+
+# Secrets & Sessions
+.insta_session.json
+
+# Cache & Compiled
 __pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Outputs & Artifacts
+output/
+temp/
+logs/
 *.mp4
 *.webm
+*.avi
+*.mkv
+*.jpg
+*.jpeg
+*.png
+*.log
+
+# Generated UI files
 tmp_render_*.html
+
+# IDEs & OS Settings
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
