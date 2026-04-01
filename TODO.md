@@ -16,8 +16,8 @@
 
 ## 다음 작업 (Next)
 - [x] `.env` 파일 생성 및 실제 API 키 입력 (OPENAI_API_KEY, NEWSAPI_KEY 또는 NAVER_*)
-- [ ] `playwright install chromium` 실행 (최초 1회)
-- [ ] 엔드-투-엔드 테스트: `python main.py`
+- [x] `playwright install chromium` 실행 (최초 1회)
+- [x] 엔드-투-엔드 테스트: `python main.py`
 - [ ] 커뮤니티 스크래퍼 CSS 선택자 검증 (사이트 레이아웃 변경 대응)
 - [ ] GitHub Actions 워크플로우 작성 (자동 스케줄 실행)
 - [ ] 인스타그램 업로드 자동화 연결

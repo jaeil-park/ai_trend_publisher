@@ -1,0 +1,36 @@
+name: AI Trend Auto Upload
+
+on:
+  schedule:
+    - cron: "0 9 * * *"   # 매일 KST 18:00 (= UTC 09:00)
+  workflow_dispatch:       # Actions 탭에서 수동 실행 가능
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: 📥 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 🐍 Python 3.10 세팅
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: 📦 의존성 설치
+        run: pip install -r requirements.txt
+
+      - name: 🎭 Playwright Chromium 설치
+        run: playwright install chromium --with-deps
+
+      - name: 🚀 파이프라인 실행
+        run: python main.py
+        env:
+          OPENAI_API_KEY:         ${{ secrets.OPENAI_API_KEY }}
+          NEWSAPI_KEY:            ${{ secrets.NEWSAPI_KEY }}
+          NAVER_CLIENT_ID:        ${{ secrets.NAVER_CLIENT_ID }}
+          NAVER_CLIENT_SECRET:    ${{ secrets.NAVER_CLIENT_SECRET }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}

@@ -15,6 +15,19 @@
       justify-content: center;
       align-items: center;
       font-family: 'Courier New', monospace;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+    }
+
+    @keyframes slideDown {
+      0% {
+        transform: translateY(-50px);
+        opacity: 0;
+      }
+      100% {
+        transform: translateY(0);
+        opacity: 1;
+      }
     }
 
     .receipt {
@@ -23,6 +36,7 @@
       padding: 60px 50px;
       border-radius: 4px;
       box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+      animation: slideDown 1s ease-out forwards;
     }
 
     .receipt-header {

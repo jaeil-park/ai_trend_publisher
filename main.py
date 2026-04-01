@@ -55,7 +55,9 @@ def process_content_via_llm(item: NormalizedItem) -> dict[str, Any]:
   "hook_title": "첫 3초 시선을 끌 강력한 헤드라인 (공통)",
   "news_summary": "뉴스 템플릿용 3줄 요약 텍스트",
   "chat_dialogue": [{{"speaker": "A", "text": "대사1"}}, {{"speaker": "B", "text": "대사2"}}],
-  "receipt_items": [{{"name": "항목명", "value": "가치/가격"}}]
+  "receipt_items": [{{"name": "항목명", "value": "가치/가격"}}],
+  "receipt_total": "영수증 하단(TOTAL)에 들어갈 짧고 센스 있는 요약 문구 (절대 숫자 계산 금지, 예: '가성비 압승!', '우주 돌파!', '비교 불가')",
+  "instagram_caption": "인스타그램 릴스 본문에 들어갈 찰진 설명 (2~3줄) + 관련 한국어 해시태그 5개. 예: '요즘 핫한 AI 소식 총정리🔥\n#AI #테크 #인공지능 #트렌드 #GPT4o'"
 }}"""
 
     response = _client.chat.completions.create(
@@ -113,7 +115,7 @@ def _inject_receipt(html: str, llm_data: dict[str, Any], today: str) -> str:
         f'<tr><td>{str(r.get("name", ""))}</td><td>{str(r.get("value", ""))}</td></tr>' for r in rows
     )
     
-    total = _calc_total(rows)
+    total = llm_data.get("receipt_total", "비교 불가")
 
     return (
         html
@@ -122,17 +124,6 @@ def _inject_receipt(html: str, llm_data: dict[str, Any], today: str) -> str:
         .replace("{{ITEMS}}", items_html)
         .replace("{{TOTAL}}", total)
     )
-
-
-def _calc_total(rows: list[dict[str, Any]]) -> str:
-    """금액 합산. 숫자 파싱 실패 시 '-' 반환."""
-    total = 0
-    for r in rows:
-        val = str(r.get("value", ""))
-        digits = re.sub(r"[^\d]", "", val)
-        if digits:
-            total += int(digits)
-    return f"{total:,}원" if total else "-"
 
 
 def _inject_chat(html: str, llm_data: dict[str, Any]) -> str:
@@ -176,9 +167,12 @@ def _inject_news(html: str, item: NormalizedItem, llm_data: dict[str, Any], toda
 # 파이프라인
 # ---------------------------------------------------------------------------
 
-def run_pipeline(query: str = "가성비 핫이슈") -> list[Path]:
+def run_pipeline(query: str = "가성비 핫이슈") -> list[tuple[Path, str]]:
     """
     전체 파이프라인 실행: 크롤 → 템플릿 전처리(OpenAI) → 렌더링
+
+    Returns:
+        [(비디오 경로, instagram_caption), ...]
     """
     manager = CrawlerManager()
     items = manager.collect(query=query)
@@ -190,19 +184,21 @@ def run_pipeline(query: str = "가성비 핫이슈") -> list[Path]:
     output_dir = Path("output")
     output_dir.mkdir(exist_ok=True)
 
-    results: list[Path] = []
+    results: list[tuple[Path, str]] = []
     template_key = "news"  # fallback (finally 블록 참조용)
 
     for idx, item in enumerate(items):
         try:
             llm_data = process_content_via_llm(item)
             template_key = llm_data.get("template_type", "news")
-            
+
             tmp_html = inject_template_variables(item, llm_data)
 
             output_path = output_dir / f"reel_{idx:03d}.mp4"
             video = render_to_video(html_path=tmp_html, output_path=output_path)
-            results.append(video)
+
+            caption = llm_data.get("instagram_caption", item["title"])
+            results.append((video, caption))
             print(f"[main] 완료: {video}")
 
         except Exception as e:
@@ -216,5 +212,15 @@ def run_pipeline(query: str = "가성비 핫이슈") -> list[Path]:
 
 
 if __name__ == "__main__":
-    videos = run_pipeline()
-    print(f"\n[main] 총 {len(videos)}개 영상 생성 완료")
+    pairs = run_pipeline()
+    print(f"\n[main] 총 {len(pairs)}개 영상 생성 완료")
+
+    if pairs and os.getenv("INSTAGRAM_ACCESS_TOKEN"):
+        from uploader import InstagramUploader
+        uploader = InstagramUploader()
+        if uploader.login():
+            for video_path, caption in pairs:
+                uploader.upload_reel(video_path, caption)
+        print("[main] 인스타그램 업로드 완료")
+    else:
+        print("[main] INSTAGRAM_ACCESS_TOKEN 미설정 → 업로드 단계 건너뜀")
