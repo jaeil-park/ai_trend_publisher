@@ -46,12 +46,33 @@ class CrawlerManager:
 
     @staticmethod
     def _normalize(items: list[dict[str, Any]]) -> list[NormalizedItem]:
-        """원시 데이터를 {"title", "content", "source"} 형태로 정규화한다."""
+        """원시 데이터를 정규화하고 유사한 제목(중복 뉴스)을 제거한다."""
+        import difflib
+        
         normalized: list[NormalizedItem] = []
+        seen_titles: list[str] = []
+        
         for item in items:
+            title = str(item.get("title", "")).strip()
+            if not title:
+                continue
+                
+            # 중복 검사: 기존 제목들과 유사도 60% 이상이면 스킵
+            is_duplicate = False
+            for seen in seen_titles:
+                similarity = difflib.SequenceMatcher(None, title, seen).ratio()
+                if similarity > 0.6:
+                    is_duplicate = True
+                    break
+                    
+            if is_duplicate:
+                continue
+                
+            seen_titles.append(title)
+            
             normalized.append(
                 {
-                    "title": str(item.get("title", "")),
+                    "title": title,
                     "content": str(item.get("content", "")),
                     "source": str(item.get("source", "unknown")),
                 }
