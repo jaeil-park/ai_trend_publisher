@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080" />
+  <title>Receipt UI</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 1080px;
+      height: 1920px;
+      background: #f5f0e8;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-family: 'Courier New', monospace;
+    }
+
+    .receipt {
+      width: 700px;
+      background: #fff;
+      padding: 60px 50px;
+      border-radius: 4px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    }
+
+    .receipt-header {
+      text-align: center;
+      border-bottom: 2px dashed #333;
+      padding-bottom: 30px;
+      margin-bottom: 30px;
+    }
+
+    .receipt-header .store-name {
+      font-size: 52px;
+      font-weight: bold;
+      letter-spacing: 4px;
+    }
+
+    .receipt-header .date {
+      font-size: 28px;
+      color: #555;
+      margin-top: 10px;
+    }
+
+    .receipt-items {
+      width: 100%;
+      font-size: 30px;
+      margin-bottom: 30px;
+    }
+
+    .receipt-items tr td {
+      padding: 10px 0;
+    }
+
+    .receipt-items tr td:last-child {
+      text-align: right;
+    }
+
+    .receipt-total {
+      border-top: 2px solid #333;
+      padding-top: 20px;
+      font-size: 38px;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .receipt-footer {
+      text-align: center;
+      margin-top: 40px;
+      font-size: 26px;
+      color: #888;
+      border-top: 2px dashed #333;
+      padding-top: 30px;
+    }
+
+    /* --- 템플릿 변수 주입 영역 --- */
+    /* {{TITLE}}, {{ITEMS}}, {{TOTAL}}, {{DATE}} */
+  </style>
+</head>
+<body>
+  <div class="receipt">
+    <div class="receipt-header">
+      <div class="store-name">{{TITLE}}</div>
+      <div class="date">{{DATE}}</div>
+    </div>
+
+    <table class="receipt-items">
+      <!-- {{ITEMS}} : <tr><td>항목명</td><td>금액</td></tr> 반복 -->
+      {{ITEMS}}
+    </table>
+
+    <div class="receipt-total">
+      <span>TOTAL</span>
+      <span>{{TOTAL}}</span>
+    </div>
+
+    <div class="receipt-footer">
+      감사합니다 · 또 오세요
+    </div>
+  </div>
+</body>
+</html>

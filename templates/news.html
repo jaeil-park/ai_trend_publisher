@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080" />
+  <title>Breaking News UI</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 1080px;
+      height: 1920px;
+      background: #0d0d0d;
+      color: #fff;
+      font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .news-ticker {
+      background: #e60000;
+      padding: 22px 40px;
+      font-size: 34px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .news-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 80px 60px;
+      gap: 50px;
+    }
+
+    .news-tag {
+      display: inline-block;
+      background: #e60000;
+      color: #fff;
+      padding: 14px 30px;
+      font-size: 32px;
+      font-weight: bold;
+      letter-spacing: 2px;
+      width: fit-content;
+    }
+
+    .news-headline {
+      font-size: 68px;
+      font-weight: 900;
+      line-height: 1.3;
+      color: #fff;
+    }
+
+    .news-summary {
+      font-size: 36px;
+      line-height: 1.7;
+      color: #ccc;
+    }
+
+    .news-source {
+      font-size: 28px;
+      color: #888;
+      margin-top: 10px;
+    }
+
+    .news-footer {
+      background: #1a1a1a;
+      padding: 36px 60px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 28px;
+      color: #aaa;
+    }
+
+    .news-footer .logo {
+      font-size: 38px;
+      font-weight: bold;
+      color: #e60000;
+    }
+
+    /* --- 템플릿 변수 주입 영역 --- */
+    /* {{HEADLINE}}, {{SUMMARY}}, {{SOURCE}}, {{PUBLISHED_AT}} */
+  </style>
+</head>
+<body>
+  <div class="news-ticker">🔴 속보 · BREAKING NEWS</div>
+
+  <div class="news-main">
+    <div class="news-tag">단독</div>
+    <div class="news-headline">{{HEADLINE}}</div>
+    <div class="news-summary">{{SUMMARY}}</div>
+    <div class="news-source">출처: {{SOURCE}}</div>
+  </div>
+
+  <div class="news-footer">
+    <div class="logo">TREND NOW</div>
+    <div>{{PUBLISHED_AT}}</div>
+  </div>
+</body>
+</html>
