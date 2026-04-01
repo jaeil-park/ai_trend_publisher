@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import jinja2
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -32,50 +33,55 @@ _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 # LLM 템플릿 선택 및 데이터 추출
 # ---------------------------------------------------------------------------
 
-def process_content_via_llm(item: NormalizedItem) -> dict[str, Any]:
+def process_content_via_llm(items: list[NormalizedItem]) -> dict[str, Any]:
     """
-    OpenAI API를 호출하여 콘텐츠에 맞는 템플릿 키와 세부 데이터를 추출한다.
+    OpenAI API를 호출하여 여러 개의 뉴스/게시물을 하나의 시퀀스(news_sequence) 템플릿용으로 요약한다.
     결과 JSON 스키마 강제.
     """
-    prompt = f"""다음 뉴스/커뮤니티 게시물을 SNS 릴스로 만들 때 가장 어울리는 형식을 고르고, 
-해당 형식에 필요한 데이터를 지정된 JSON 스키마에 맞춰 변환해줘.
+    # 묶음 데이터 컨텍스트 생성
+    context_text = ""
+    for idx, item in enumerate(items, 1):
+        context_text += f"\n[뉴스{idx}]\n제목: {item['title']}\n출처: {item['source']}\n내용: {item['content'][:500]}\n"
 
-제목: {item['title']}
-내용: {item['content'][:800]}
-출처: {item['source']}
+    prompt = f"""다음 여러 개의 뉴스/커뮤니티 게시물들을 최대 5개 묶음으로 엮어 1개의 '뉴스 시퀀스(순차 전환)' 릴스 영상으로 만들거야.
+각 뉴스 항목(scene)은 화면에 단 4초만 노출될 것이므로 가독성이 생명이야.
+아래 데이터를 분석하여 지정된 JSON 스키마에 맞춰 변환해줘.
 
-선택지:
-- receipt: 가격 비교, 가성비 정보, 지출 내역 관련
-- chat: 댓글 반응, 갑론을박, 여러 사람의 의견 위주
-- news: 속보, 단독, 사건·사고 등 팩트 전달 위주
+{context_text}
 
 반드시 다음 JSON 구조를 반환해야 해 (마크다운 백틱 없이 순수 JSON만 반환):
 {{
   "template_type": "news", 
-  "hook_title": "첫 3초 시선을 끌 강력한 헤드라인 (공통)",
-  "news_summary": "뉴스 템플릿용 3줄 요약 텍스트",
-  "chat_dialogue": [{{"speaker": "A", "text": "대사1"}}, {{"speaker": "B", "text": "대사2"}}],
-  "receipt_items": [{{"name": "항목명", "value": "가치/가격"}}],
-  "receipt_total": "영수증 하단(TOTAL)에 들어갈 짧고 센스 있는 요약 문구 (절대 숫자 계산 금지, 예: '가성비 압승!', '우주 돌파!', '비교 불가')",
-  "instagram_caption": "인스타그램 릴스 본문에 들어갈 찰진 설명 (2~3줄) + 관련 한국어 해시태그 5개. 예: '요즘 핫한 AI 소식 총정리🔥\n#AI #테크 #인공지능 #트렌드 #GPT4o'"
-}}"""
+  "instagram_caption": "인스타그램 릴스 본문에 들어갈 찰진 전체 요약 설명 (2~3줄) + 관련 한국어 해시태그 5개",
+  "scenes": [
+    {{
+      "hook_title": "해당 뉴스의 첫 3초 시선을 끌 강력한 헤드라인 (15자 이내)",
+      "summary": "화면에서 4초 안에 읽히도록 아주 짧고 간결한 핵심 요약 (2줄 이내)",
+      "source": "해당 출처명"
+    }}
+  ]
+}}
+"""
 
-    response = _client.chat.completions.create(
+    resp = _client.chat.completions.create(
         model="gpt-4o",
         messages=[
-            {"role": "system", "content": "You are a professional social media content producer."},
+            {"role": "system", "content": "너는 숏폼(릴스) 콘텐츠 전문 바이럴 마케터이자 데이터 정제 AI야. 오직 JSON만 응답상태로 반환해."},
             {"role": "user", "content": prompt}
         ],
+        temperature=0.7,
         response_format={"type": "json_object"}
     )
+    res_str = resp.choices[0].message.content or "{}"
     
+    # JSON Parsing 안전 처리
     try:
-        data = json.loads(response.choices[0].message.content or "{}")
+        data = json.loads(res_str)
     except json.JSONDecodeError:
-        data = {"template_type": "news", "hook_title": item["title"], "news_summary": "텍스트 분석 실패"}
-        
-    # 기본값 보장
-    if "template_type" not in data or data["template_type"] not in TEMPLATES:
+        print("[main] JSON 파싱 에러 발생:", res_str)
+        data = {"template_type": "news", "scenes": [], "instagram_caption": "요약 실패"}
+
+    if not data.get("template_type"):
         data["template_type"] = "news"
     
     return data
@@ -85,83 +91,30 @@ def process_content_via_llm(item: NormalizedItem) -> dict[str, Any]:
 # 템플릿별 변수 주입
 # ---------------------------------------------------------------------------
 
-def inject_template_variables(item: NormalizedItem, llm_data: dict[str, Any]) -> str:
+def inject_template_variables(llm_data: dict[str, Any]) -> str:
     """
-    선택된 템플릿에 데이터를 주입하고 임시 HTML 파일을 반환한다.
+    선택된 템플릿(news.html)에 Jinja2를 사용하여 데이터를 주입하고 임시 HTML 파일을 반환한다.
     """
-    template_key = llm_data["template_type"]
-    html = TEMPLATES[template_key].read_text(encoding="utf-8")
+    template_key = llm_data.get("template_type", "news")
+    if template_key not in TEMPLATES:
+        template_key = "news"
+        
+    html_content = TEMPLATES[template_key].read_text(encoding="utf-8")
+    
+    # Jinja2 렌더링 적용 (Jinja 문법인 {% for %} 등을 파싱)
+    template = jinja2.Template(html_content)
+    
     today = datetime.now().strftime("%Y.%m.%d")
+    
+    # scenes 데이터와 공통 속성들을 함께 주입 (news 외의 구 템플릿 지원은 배제)
+    rendered_html = template.render(
+        scenes=llm_data.get("scenes", []),
+        published_at=today
+    )
 
-    if template_key == "receipt":
-        html = _inject_receipt(html, llm_data, today)
-    elif template_key == "chat":
-        html = _inject_chat(html, llm_data)
-    else:
-        html = _inject_news(html, item, llm_data, today)
-
-    tmp_path = f"tmp_render_{template_key}.html"
-    Path(tmp_path).write_text(html, encoding="utf-8")
+    tmp_path = f"tmp_render_sequence.html"
+    Path(tmp_path).write_text(rendered_html, encoding="utf-8")
     return tmp_path
-
-
-def _inject_receipt(html: str, llm_data: dict[str, Any], today: str) -> str:
-    """LLM이 파싱한 receipt_items 배열 → <tr> 반복 주입."""
-    rows = llm_data.get("receipt_items", [])
-    if not rows:
-        rows = [{"name": "확인 요망", "value": "0"}]
-
-    items_html = "\n".join(
-        f'<tr><td>{str(r.get("name", ""))}</td><td>{str(r.get("value", ""))}</td></tr>' for r in rows
-    )
-    
-    total = llm_data.get("receipt_total", "비교 불가")
-
-    return (
-        html
-        .replace("{{TITLE}}", str(llm_data.get("hook_title", ""))[:20])
-        .replace("{{DATE}}", today)
-        .replace("{{ITEMS}}", items_html)
-        .replace("{{TOTAL}}", total)
-    )
-
-
-def _inject_chat(html: str, llm_data: dict[str, Any]) -> str:
-    """LLM이 파싱한 chat_dialogue 배열 → 좌/우 말풍선 교차 주입."""
-    dialogue = llm_data.get("chat_dialogue", [])
-    if not dialogue:
-        dialogue = [{"speaker": "알림", "text": "대화 내용이 부족합니다."}]
-
-    bubbles_html = ""
-    sides = ["left", "right"]
-    
-    for i, msg in enumerate(dialogue[:8]):
-        side = sides[i % 2]
-        nick = msg.get("speaker", f"익명{i+1}")
-        text = msg.get("text", "")
-        bubbles_html += (
-            f'<div class="bubble {side}">'
-            f'<div class="sender">{nick}</div>'
-            f'{text}'
-            f'</div>\n'
-        )
-
-    return (
-        html
-        .replace("{{CHAT_TITLE}}", str(llm_data.get("hook_title", ""))[:25])
-        .replace("{{MESSAGES}}", bubbles_html)
-    )
-
-
-def _inject_news(html: str, item: NormalizedItem, llm_data: dict[str, Any], today: str) -> str:
-    """뉴스 헤드라인 직접 주입."""
-    return (
-        html
-        .replace("{{HEADLINE}}", str(llm_data.get("hook_title", "")))
-        .replace("{{SUMMARY}}", str(llm_data.get("news_summary", "")))
-        .replace("{{SOURCE}}", str(item.get("source", "")))
-        .replace("{{PUBLISHED_AT}}", today)
-    )
 
 # ---------------------------------------------------------------------------
 # 파이프라인
@@ -185,28 +138,41 @@ def run_pipeline(query: str = "가성비 핫이슈") -> list[tuple[Path, str]]:
     output_dir.mkdir(exist_ok=True)
 
     results: list[tuple[Path, str]] = []
-    template_key = "news"  # fallback (finally 블록 참조용)
+    # 5개씩 묶기 (Chunking)
+    chunk_size = 5
+    item_chunks = [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
 
-    for idx, item in enumerate(items):
+    for chunk_idx, chunk in enumerate(item_chunks):
         try:
-            llm_data = process_content_via_llm(item)
-            template_key = llm_data.get("template_type", "news")
+            llm_data = process_content_via_llm(chunk)
+            
+            # Jinja2 기반으로 HTML 생성
+            tmp_html = inject_template_variables(llm_data)
 
-            tmp_html = inject_template_variables(item, llm_data)
+            output_path = output_dir / f"sequence_reel_{chunk_idx:03d}.mp4"
+            
+            # 동적 시간 설정: 장면당 4초 + 여유 1초
+            scenes_count = len(llm_data.get("scenes", []))
+            calc_duration = (scenes_count * 4) + 1
+            if calc_duration < 5:
+                calc_duration = 5
 
-            output_path = output_dir / f"reel_{idx:03d}.mp4"
-            video = render_to_video(html_path=tmp_html, output_path=output_path)
+            video = render_to_video(
+                html_path=tmp_html, 
+                output_path=output_path, 
+                duration=calc_duration
+            )
 
-            caption = llm_data.get("instagram_caption", item["title"])
+            caption = llm_data.get("instagram_caption", "Trend Now News Sequence")
             results.append((video, caption))
-            print(f"[main] 완료: {video}")
+            print(f"[main] 완료: {video} (총 {scenes_count}개 장면, {calc_duration}초)")
 
         except Exception as e:
-            print(f"[main] item[{idx}] 처리 실패: {e}")
+            print(f"[main] 처리 실패 (Chunk {chunk_idx}): {e}")
         finally:
-            tmp = Path(f"tmp_render_{template_key}.html")
-            if tmp.exists():
-                tmp.unlink()
+            tmp_path = Path("tmp_render_sequence.html")
+            if tmp_path.exists():
+                tmp_path.unlink()
 
     return results
 

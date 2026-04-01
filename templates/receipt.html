@@ -2,14 +2,17 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=1080" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Receipt UI</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      width: 1080px;
-      height: 1920px;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
       background: #f5f0e8;
       display: flex;
       justify-content: center;
@@ -31,41 +34,42 @@
     }
 
     .receipt {
-      width: 700px;
+      width: 85vw;
+      max-width: 600px;
       background: #fff;
-      padding: 60px 50px;
-      border-radius: 4px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+      padding: 6vh 5vw;
+      border-radius: 1vw;
+      box-shadow: 0 1vh 2vw rgba(0,0,0,0.12);
       animation: slideDown 1s ease-out forwards;
     }
 
     .receipt-header {
       text-align: center;
       border-bottom: 2px dashed #333;
-      padding-bottom: 30px;
-      margin-bottom: 30px;
+      padding-bottom: 3vh;
+      margin-bottom: 3vh;
     }
 
     .receipt-header .store-name {
-      font-size: 52px;
+      font-size: 6vw;
       font-weight: bold;
-      letter-spacing: 4px;
+      letter-spacing: 0.4vw;
     }
 
     .receipt-header .date {
-      font-size: 28px;
+      font-size: 3vw;
       color: #555;
-      margin-top: 10px;
+      margin-top: 1vh;
     }
 
     .receipt-items {
       width: 100%;
-      font-size: 30px;
-      margin-bottom: 30px;
+      font-size: 3.5vw;
+      margin-bottom: 3vh;
     }
 
     .receipt-items tr td {
-      padding: 10px 0;
+      padding: 1vh 0;
     }
 
     .receipt-items tr td:last-child {
@@ -74,8 +78,8 @@
 
     .receipt-total {
       border-top: 2px solid #333;
-      padding-top: 20px;
-      font-size: 38px;
+      padding-top: 2vh;
+      font-size: 4.5vw;
       font-weight: bold;
       display: flex;
       justify-content: space-between;
@@ -83,11 +87,11 @@
 
     .receipt-footer {
       text-align: center;
-      margin-top: 40px;
-      font-size: 26px;
+      margin-top: 4vh;
+      font-size: 3vw;
       color: #888;
       border-top: 2px dashed #333;
-      padding-top: 30px;
+      padding-top: 3vh;
     }
 
     /* --- 템플릿 변수 주입 영역 --- */

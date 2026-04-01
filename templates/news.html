@@ -2,14 +2,17 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=1080" />
-  <title>Breaking News UI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Breaking News UI Sequence</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-      width: 1080px;
-      height: 1920px;
+      width: 100vw;
+      height: 100vh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
       background: #0d0d0d;
       color: #fff;
       font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
@@ -19,106 +22,189 @@
       overflow-wrap: break-word;
     }
 
-    @keyframes fadeUp {
-      0% {
-        transform: translateY(30px);
-        opacity: 0;
-      }
-      100% {
-        transform: translateY(0);
-        opacity: 1;
-      }
-    }
-
+    /* 상단 배너 */
     .news-ticker {
       background: #e60000;
-      padding: 22px 40px;
-      font-size: 34px;
+      padding: 2vh 4vw;
+      font-size: 3.5vw;
       font-weight: bold;
-      letter-spacing: 3px;
+      letter-spacing: 0.2vw;
       text-transform: uppercase;
+      z-index: 10;
     }
 
-    .news-main {
+    /* 시퀀스 컨테이너 */
+    .sequence-container {
       flex: 1;
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+    }
+
+    /* 각 뉴스 씬 */
+    .scene {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      padding: 80px 100px;
-      gap: 50px;
+      padding: 6vh 8vw;
+      gap: 4vh;
+      max-width: 100%;
+      
+      /* 전환 애니메이션 처리 */
+      opacity: 0;
+      transition: opacity 0.8s ease-in-out;
+      pointer-events: none;
     }
 
+    .scene.active {
+      opacity: 1;
+      z-index: 5;
+    }
+
+    /* 텍스트 요소들 - 애니메이션 클래스 적용 시 동작 */
+    .scene .news-tag     { transform: translateY(30px); opacity: 0; transition: all 0.6s ease 0.2s; }
+    .scene .news-headline{ transform: translateY(30px); opacity: 0; transition: all 0.6s ease 0.4s; }
+    .scene .news-summary { transform: translateY(30px); opacity: 0; transition: all 0.6s ease 0.6s; }
+    .scene .news-source  { transform: translateY(30px); opacity: 0; transition: all 0.6s ease 0.8s; }
+
+    .scene.active .news-tag     { transform: translateY(0); opacity: 1; }
+    .scene.active .news-headline{ transform: translateY(0); opacity: 1; }
+    .scene.active .news-summary { transform: translateY(0); opacity: 1; }
+    .scene.active .news-source  { transform: translateY(0); opacity: 1; }
+
+    /* 모듈별 스타일 */
     .news-tag {
       display: inline-block;
       background: #e60000;
       color: #fff;
-      padding: 14px 30px;
-      font-size: 32px;
+      padding: 1.5vh 3vw;
+      font-size: 3.5vw;
       font-weight: bold;
-      letter-spacing: 2px;
+      letter-spacing: 0.2vw;
       width: fit-content;
-      opacity: 0;
-      animation: fadeUp 0.8s ease-out 0.2s forwards;
+      max-width: 100%;
     }
 
     .news-headline {
-      font-size: 68px;
+      font-size: 7.5vw;
       font-weight: 900;
       line-height: 1.3;
       color: #fff;
-      opacity: 0;
-      animation: fadeUp 0.8s ease-out 0.5s forwards;
+      max-width: 100%;
     }
 
     .news-summary {
-      font-size: 36px;
-      line-height: 1.7;
+      font-size: 4.5vw;
+      line-height: 1.6;
       color: #ccc;
-      opacity: 0;
-      animation: fadeUp 0.8s ease-out 0.8s forwards;
+      max-width: 100%;
     }
 
     .news-source {
-      font-size: 28px;
+      font-size: 3vw;
       color: #888;
-      margin-top: 10px;
-      opacity: 0;
-      animation: fadeUp 0.8s ease-out 1.1s forwards;
+      margin-top: 1vh;
+      max-width: 100%;
     }
 
+    /* 하단 로고 */
     .news-footer {
       background: #1a1a1a;
-      padding: 36px 60px;
+      padding: 3vh 6vw;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 28px;
+      font-size: 3vw;
       color: #aaa;
+      z-index: 10;
+      width: 100%;
     }
 
     .news-footer .logo {
-      font-size: 38px;
+      font-size: 4vw;
       font-weight: bold;
       color: #e60000;
     }
 
-    /* --- 템플릿 변수 주입 영역 --- */
-    /* {{HEADLINE}}, {{SUMMARY}}, {{SOURCE}}, {{PUBLISHED_AT}} */
+    /* 프로그레스 바 (옵션) */
+    .progress-bar-container {
+      height: 8px;
+      width: 100%;
+      background: #333;
+    }
+    .progress-bar {
+      height: 100%;
+      background: #e60000;
+      width: 0%;
+      transition: width linear;
+    }
+
   </style>
 </head>
 <body>
-  <div class="news-ticker">🔴 속보 · BREAKING NEWS</div>
+  <div class="news-ticker">🔴 오늘의 핫이슈 · TREND NOW</div>
 
-  <div class="news-main">
-    <div class="news-tag">단독</div>
-    <div class="news-headline">{{HEADLINE}}</div>
-    <div class="news-summary">{{SUMMARY}}</div>
-    <div class="news-source">출처: {{SOURCE}}</div>
+  <div class="sequence-container">
+    {% for scene in scenes %}
+    <!-- 첫 번째 항목만 미리 active 클래스를 줘서 렌더링 시작 -->
+    <div class="scene {% if loop.index0 == 0 %}active{% endif %}">
+      <div class="news-tag">이슈 {{ loop.index }}</div>
+      <div class="news-headline">{{ scene.hook_title }}</div>
+      <div class="news-summary">{{ scene.summary }}</div>
+      <div class="news-source">출처: {{ scene.source }}</div>
+    </div>
+    {% endfor %}
   </div>
+
+  <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
 
   <div class="news-footer">
     <div class="logo">TREND NOW</div>
-    <div>{{PUBLISHED_AT}}</div>
+    <div>{{ published_at }}</div>
   </div>
+
+  <script>
+    // JS 씬 (Scene) 전환 스크립트
+    const scenes = document.querySelectorAll('.scene');
+    const progressBar = document.getElementById('progressBar');
+    
+    // Playwright가 캡처하기 전 폰트 등 로딩 감안 초기 지연 (선택)
+    let currentIndex = 0;
+    const SCENE_DURATION_MS = 4000; // 씬 하나당 4초 배정
+    
+    // 진행바 애니메이션 초기화 (해당 씬 길이만큼)
+    if(scenes.length > 0) {
+      progressBar.style.transitionDuration = SCENE_DURATION_MS + 'ms';
+      progressBar.style.width = '100%';
+    }
+
+    setInterval(() => {
+      if (scenes.length <= 1) return;
+      
+      // 현재 씬 끄기
+      scenes[currentIndex].classList.remove('active');
+      
+      // 다음 씬 인덱스
+      currentIndex++;
+      if (currentIndex >= scenes.length) {
+        // 영상은 어차피 파이프라인에서 끊기지만, JS 상으론 멈추거나 루프 반영
+        currentIndex = scenes.length - 1; 
+      } else {
+        // 다음 씬 켜기
+        scenes[currentIndex].classList.add('active');
+        
+        // 프로그레스 바 리셋 애니메이션 트릭
+        progressBar.style.transitionDuration = '0ms';
+        progressBar.style.width = '0%';
+        setTimeout(() => {
+          progressBar.style.transitionDuration = SCENE_DURATION_MS + 'ms';
+          progressBar.style.width = '100%';
+        }, 50);
+      }
+
+    }, SCENE_DURATION_MS);
+  </script>
 </body>
 </html>

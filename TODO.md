@@ -1,30 +1,24 @@
-# 프로젝트 현황
+# 프로젝트 현황 (AI Trend Publisher)
 
-## 완료
-- [x] 프로젝트 스켈레톤 생성 (2026-04-01)
-  - `crawler/__init__.py`, `news_api.py`, `community_scraper.py`, `manager.py`
-  - `templates/receipt.html`, `chat.html`, `news.html`
-  - `renderer.py`, `main.py`
-- [x] `output/` 폴더 생성 (.gitkeep 포함) (2026-04-01)
-- [x] `requirements.txt` 작성 + 패키지 설치 완료 (2026-04-01)
-  - anthropic, playwright, jinja2, python-dotenv, requests, beautifulsoup4
-- [x] `crawler/news_api.py` — NewsAPI + Naver News API 이중 소스 구현 (2026-04-01)
-- [x] `crawler/community_scraper.py` — BeautifulSoup 파싱 구현 (dcinside, fmkorea, clien) (2026-04-01)
-- [x] `renderer.py` — ffmpeg webm→mp4 변환 subprocess 구현 (2026-04-01)
-- [x] `main.py` — OpenAI API(`gpt-4o`) 템플릿 선택, 훅/요약 구조화 생성(JSON) 반영 (2026-04-01)
-- [x] `main.py` — 템플릿별 변수 주입 고도화 (receipt: 항목 파싱, chat: 말풍선, news: 직접 주입) (2026-04-01)
+**완벽 자동화된 인스타그램 릴스 생성/업로드 파이프라인 (Sequencing 버전)**
 
-## 다음 작업 (Next)
-- [x] `.env` 파일 생성 및 실제 API 키 입력 (OPENAI_API_KEY, NEWSAPI_KEY 또는 NAVER_*)
-- [x] `playwright install chromium` 실행 (최초 1회)
-- [x] 엔드-투-엔드 테스트: `python main.py`
-- [ ] 커뮤니티 스크래퍼 CSS 선택자 검증 (사이트 레이아웃 변경 대응)
-- [ ] GitHub Actions 워크플로우 작성 (자동 스케줄 실행)
-- [ ] 인스타그램 업로드 자동화 연결
+## 완료 내역 (Done)
+- [x] 프로젝트 스켈레톤 및 코어 파이프라인 생성
+- [x] 크롤러 (NewsAPI, 네이버 뉴스, 커뮤니티 파싱)
+- [x] 렌더러 (Playwright Headless + ffmpeg webm -> mp4)
+- [x] OpenAI LLM 연동 (템플릿 분류, 3줄 요약, 대사 매핑, JSON 스키마 강제)
+- [x] **[신규]** 다중 뉴스 Sequencing 병합 렌더링 도입 (비디오 도배 방지, 5개 Chunking)
+- [x] **[신규]** 모든 템플릿(news, chat, receipt) 720x1280 (9:16) 상대단위(vw/vh) 반응형 스케일링 적용
+- [x] **[신규]** META 공식 Instagram Graph API 업로더 개발 (Catbox 미디어 브릿지 연동)
+- [x] **[신규]** GitHub Actions 자동 업로드 워크플로우 구성 (`auto_upload.yml`)
+- [x] 민감 세션/미디어 파일 GitHub 노출 방지 (`.gitignore` 및 `git rm --cached`)
 
-## 아키텍처 메모
-- Viewport 고정: 1080×1920 (rules.md 강제)
-- 녹화 시간: 10초, 포맷: H.264/AAC mp4 (ffmpeg)
-- 정규화 포맷: `[{"title": str, "content": str, "source": str}]`
-- 템플릿 키: `receipt` | `chat` | `news`
-- LLM: `gpt-4o`, JSON structured output으로 템플릿 결정 및 대본 요약/대사 매핑
+## 최종 남은 작업 (Next & Final)
+- [ ] 현재까지 변경된 모든 소스 코드를 GitHub에 Push 반영하기
+- [ ] GitHub Repository Settings > Secrets 에 `.env` 의 환경변수 정보 동일하게 입력하기
+  - `OPENAI_API_KEY`
+  - `NEWSAPI_KEY`
+  - `NAVER_CLIENT_ID`
+  - `NAVER_CLIENT_SECRET`
+  - `INSTAGRAM_ACCESS_TOKEN`
+- [ ] GitHub Actions 탭에서 `workflow_dispatch` 버튼으로 완전 원격 자동화 E2E 테스트 돌려보기
