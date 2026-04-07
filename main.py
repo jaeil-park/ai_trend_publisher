@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 import re
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -33,7 +34,7 @@ _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 # LLM 템플릿 선택 및 데이터 추출
 # ---------------------------------------------------------------------------
 
-def process_content_via_llm(items: list[NormalizedItem]) -> dict[str, Any]:
+def process_content_via_llm(items: list[NormalizedItem], max_retries: int = 3, retry_delay: float = 2.0) -> dict[str, Any]:
     """
     OpenAI API를 호출하여 여러 개의 뉴스/게시물을 하나의 시퀀스(news_sequence) 템플릿용으로 요약한다.
     결과 JSON 스키마 강제.
@@ -63,16 +64,28 @@ def process_content_via_llm(items: list[NormalizedItem]) -> dict[str, Any]:
 }}
 """
 
-    resp = _client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "너는 숏폼(릴스) 콘텐츠 전문 바이럴 마케터이자 데이터 정제 AI야. 오직 JSON만 응답상태로 반환해."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        response_format={"type": "json_object"}
-    )
-    res_str = resp.choices[0].message.content or "{}"
+    res_str = ""
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = _client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "너는 숏폼(릴스) 콘텐츠 전문 바이럴 마케터이자 데이터 정제 AI야. 오직 JSON만 응답상태로 반환해."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                response_format={"type": "json_object"},
+                timeout=30.0  # 타임아웃 30초 강제 설정
+            )
+            res_str = resp.choices[0].message.content or "{}"
+            break
+        except Exception as e:
+            print(f"[main] OpenAI API 호출 에러 (attempt {attempt}/{max_retries}): {e}")
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+            else:
+                print("[main] OpenAI API 최종 실패. 빈 데이터를 반환합니다.")
+                return {"template_type": "news", "scenes": [], "instagram_caption": "요약 실패"}
     
     # JSON Parsing 안전 처리
     try:
@@ -120,13 +133,26 @@ def inject_template_variables(llm_data: dict[str, Any]) -> str:
 # 파이프라인
 # ---------------------------------------------------------------------------
 
-def run_pipeline(query: str = "가성비 핫이슈") -> list[tuple[Path, str]]:
+def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
     """
     전체 파이프라인 실행: 크롤 → 템플릿 전처리(OpenAI) → 렌더링
 
     Returns:
         [(비디오 경로, instagram_caption), ...]
     """
+    if not query:
+        import random
+        keyword_pool = [
+            # 경제/사회/정책
+            "서민 경제", "물가", "가성비", "지원금", "부동산", "주식 시장", "청년 정책", "재테크",
+            # IT/테크/과학
+            "신제품", "AI 트렌드", "테크 핫이슈", "스마트폰", "모빌리티", "게임 신작", "우주 항공",
+            # 엔터/라이프/트렌드
+            "OTT 신작", "K팝 트렌드", "영화 개봉", "여행 핫플레이스", "건강 관리", "직장인 공감", "팝업스토어"
+        ]
+        query = random.choice(keyword_pool)
+        print(f"[main] 🎲 랜덤 검색어 선택: '{query}'")
+
     manager = CrawlerManager()
     items = manager.collect(query=query)
 
@@ -166,6 +192,9 @@ def run_pipeline(query: str = "가성비 핫이슈") -> list[tuple[Path, str]]:
             caption = llm_data.get("instagram_caption", "Trend Now News Sequence")
             results.append((video, caption))
             print(f"[main] 완료: {video} (총 {scenes_count}개 장면, {calc_duration}초)")
+
+            # [신규] 렌더링이 성공적으로 완료된 청크(Chunk)의 기사들을 히스토리에 기록
+            manager.update_history(chunk)
 
         except Exception as e:
             print(f"[main] 처리 실패 (Chunk {chunk_idx}): {e}")

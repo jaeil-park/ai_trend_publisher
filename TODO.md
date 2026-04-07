@@ -14,11 +14,11 @@
 - [x] 민감 세션/미디어 파일 GitHub 노출 방지 (`.gitignore` 및 `git rm --cached`)
 
 ## 최종 남은 작업 (Next & Final)
-- [ ] 현재까지 변경된 모든 소스 코드를 GitHub에 Push 반영하기
-- [ ] GitHub Repository Settings > Secrets 에 `.env` 의 환경변수 정보 동일하게 입력하기
+- [x] 현재까지 변경된 모든 소스 코드를 GitHub에 Push 반영하기
+- [x] GitHub Repository Settings > Secrets 에 `.env` 의 환경변수 정보 동일하게 입력하기
   - `OPENAI_API_KEY`
   - `NEWSAPI_KEY`
   - `NAVER_CLIENT_ID`
   - `NAVER_CLIENT_SECRET`
   - `INSTAGRAM_ACCESS_TOKEN`
-- [ ] GitHub Actions 탭에서 `workflow_dispatch` 버튼으로 완전 원격 자동화 E2E 테스트 돌려보기
+- [x] GitHub Actions 탭에서 `workflow_dispatch` 버튼으로 완전 원격 자동화 E2E 테스트 돌려보기
