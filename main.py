@@ -57,8 +57,8 @@ def process_content_via_llm(items: list[NormalizedItem], max_retries: int = 3, r
   "instagram_caption": "인스타그램 릴스 본문에 들어갈 찰진 전체 요약 설명 (2~3줄) + 관련 한국어 해시태그 5개",
   "scenes": [
     {{
-      "hook_title": "해당 뉴스의 첫 3초 시선을 끌 강력한 헤드라인 (15자 이내)",
-      "summary": "화면에서 4초 안에 읽히도록 아주 짧고 간결한 핵심 요약 (2줄 이내)",
+      "hook_title": "해당 뉴스의 첫 3초 시선을 끌 강력한 헤드라인 (10자 이내)",
+      "summary": "화면에서 4초 안에 읽히도록 아주 짧고 간결한 핵심 요약 (띄어쓰기 포함 25자 이내)",
       "source": "해당 출처명"
     }}
   ]
@@ -112,7 +112,8 @@ def generate_tts(text: str, output_path: Path) -> Path | None:
         with _client.audio.speech.with_streaming_response.create(
             model="tts-1",
             voice="onyx",  # 남성 목소리 (nova, shimmer 등 여성 목소리로 변경 가능)
-            input=text
+            input=text,
+            speed=1.25     # 숏폼 템포에 맞춰 말하기 속도를 1.25배로 빠르게
         ) as response:
             response.stream_to_file(str(output_path))
         return output_path
@@ -218,7 +219,8 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
             output_path = output_dir / f"sequence_reel_{chunk_idx:03d}.mp4"
             
             # [신규] TTS 오디오 텍스트 구성 및 생성
-            tts_text = "오늘의 트렌드 핫이슈입니다. "
+            # 인트로 멘트를 제거하여 첫 번째 화면 전환과 음성 타이밍을 0초부터 정확히 일치시킴
+            tts_text = ""
             for scene in llm_data.get("scenes", []):
                 # 구두점(.)을 두어 TTS가 문장 사이에서 자연스럽게 쉬도록 유도
                 title = str(scene.get('hook_title', '')).strip()

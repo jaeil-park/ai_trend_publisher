@@ -110,19 +110,27 @@ class InstagramUploader:
     def _upload_to_catbox(self, video_path: Path) -> str | None:
         """Catbox에 파일을 업로드하여 Public URL을 얻어낸다."""
         print("[uploader]   1/4 Catbox 브릿지 터널링 업로드 중...")
-        with video_path.open("rb") as f:
-            resp = requests.post(
-                CATBOX_API,
-                data={"reqtype": "fileupload"},
-                files={"fileToUpload": f},
-                timeout=120,
-            )
-        
-        if resp.status_code == 200 and resp.text.startswith("https://"):
-            print(f"[uploader]   브릿지 확보 성공: {resp.text}")
-            return resp.text.strip()
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                with video_path.open("rb") as f:
+                    resp = requests.post(
+                        CATBOX_API,
+                        data={"reqtype": "fileupload"},
+                        files={"fileToUpload": f},
+                        timeout=120,
+                    )
+                
+                if resp.status_code == 200 and resp.text.startswith("https://"):
+                    print(f"[uploader]   브릿지 확보 성공: {resp.text}")
+                    return resp.text.strip()
+                    
+                print(f"[uploader]   브릿지 업로드 실패 (시도 {attempt}/{max_retries}): [{resp.status_code}] {resp.text}")
+            except Exception as e:
+                print(f"[uploader]   Catbox API 에러 (시도 {attempt}/{max_retries}): {e}")
             
-        print(f"[uploader]   브릿지 업로드 실패: {resp.status_code} {resp.text}")
+            if attempt < max_retries:
+                time.sleep(5 * attempt)  # 5초, 10초 점진적 대기
         return None
 
     def _create_container(self, video_url: str, caption: str) -> str | None:
