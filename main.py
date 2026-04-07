@@ -109,12 +109,12 @@ def generate_tts(text: str, output_path: Path) -> Path | None:
     """OpenAI TTS API를 사용하여 텍스트를 음성(mp3)으로 변환한다."""
     print("[main] 🎙️ AI 성우(TTS) 오디오 생성 중...")
     try:
-        response = _client.audio.speech.create(
+        with _client.audio.speech.with_streaming_response.create(
             model="tts-1",
             voice="onyx",  # 남성 목소리 (nova, shimmer 등 여성 목소리로 변경 가능)
             input=text
-        )
-        response.stream_to_file(str(output_path))
+        ) as response:
+            response.stream_to_file(str(output_path))
         return output_path
     except Exception as e:
         print(f"[main] TTS 생성 실패: {e}")
