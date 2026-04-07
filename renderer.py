@@ -3,9 +3,13 @@ Playwright 기반 렌더러 — HTML 템플릿을 1080×1920 mp4로 녹화한다
 """
 from __future__ import annotations
 
+import math
+import random
 import shutil
+import struct
 import subprocess
 import time
+import wave
 from pathlib import Path
 
 
@@ -13,6 +17,43 @@ from pathlib import Path
 VIEWPORT_WIDTH = 720
 VIEWPORT_HEIGHT = 1280
 RECORD_DURATION_SEC = 10
+
+
+def generate_typing_bgm(output_path: str | Path, duration_sec: int = 60) -> Path:
+    """
+    Python stdlib만으로 타이핑 클릭 소리 WAV를 생성한다.
+    bgm 파일이 없을 때 자동 호출된다.
+    """
+    output_path = Path(output_path)
+    sample_rate = 44100
+    frames: list[bytes] = []
+    t = 0
+    total = duration_sec * sample_rate
+
+    while t < total:
+        interval = int(sample_rate * (0.08 + random.random() * 0.08))
+        click_len = int(sample_rate * 0.04)
+
+        for i in range(click_len):
+            freq = 800 + random.random() * 400
+            env = math.exp(-i / (sample_rate * 0.015))
+            sample = env * 0.15 * math.sin(2 * math.pi * freq * i / sample_rate)
+            sample += env * 0.05 * (random.random() * 2 - 1)
+            val = max(-32767, min(32767, int(sample * 32767)))
+            frames.append(struct.pack('<h', val))
+
+        silence = interval - click_len
+        if silence > 0:
+            frames.extend([struct.pack('<h', 0)] * silence)
+        t += interval
+
+    with wave.open(str(output_path), 'w') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(b''.join(frames))
+
+    return output_path
 
 
 def render_to_video(
@@ -56,6 +97,11 @@ def render_to_video(
             )
             page = context.new_page()
             page.goto(html_path.as_uri())
+
+            # 페이지 완전 로딩 대기 (흰 배경 프레임 방지)
+            page.wait_for_load_state("networkidle", timeout=10000)
+            # 폰트/CSS 렌더링 안정화 대기
+            page.wait_for_timeout(500)
 
             # 지정된 시간 대기 (Playwright 내부 이벤트 루프 방해 방지)
             page.wait_for_timeout(duration * 1000)

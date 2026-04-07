@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from crawler.manager import CrawlerManager, NormalizedItem
-from renderer import render_to_video
+from renderer import render_to_video, generate_typing_bgm
 
 load_dotenv()
 
@@ -27,7 +27,8 @@ TEMPLATES: dict[str, Path] = {
     "chat": Path("templates/chat.html"),
     "news": Path("templates/news.html"),
 }
-BGM_PATH = Path("bgm.mp3")  # 효과음이나 타자 소리 등을 여기에 두면 자동 인식
+BGM_PATH = Path("bgm.mp3")       # 직접 준비한 BGM 파일 (우선 사용)
+TYPING_BGM_PATH = Path("typing_bgm.wav")  # 자동 생성 타이핑 소리 (bgm.mp3 없을 때)
 
 _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 
@@ -193,8 +194,14 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
             if calc_duration < 5:
                 calc_duration = 5
 
-            # [신규] 배경음악/효과음 파일 존재 여부 확인
-            current_bgm = BGM_PATH if BGM_PATH.exists() else None
+            # 배경음악 결정: bgm.mp3 우선, 없으면 타이핑 소리 자동 생성
+            if BGM_PATH.exists():
+                current_bgm = BGM_PATH
+            else:
+                if not TYPING_BGM_PATH.exists():
+                    print("[main] typing_bgm.wav 생성 중...")
+                    generate_typing_bgm(TYPING_BGM_PATH, duration_sec=calc_duration + 5)
+                current_bgm = TYPING_BGM_PATH
 
             video = render_to_video(
                 html_path=tmp_html, 

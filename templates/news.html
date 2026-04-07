@@ -194,36 +194,87 @@
   </div>
 
   <script>
-    // JS 씬 (Scene) 전환 스크립트
+    // ── 타이핑 BGM (Web Audio API 합성) ──────────────────────────────────
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function playTypingClick() {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      // 키 타격음: 짧고 높은 클릭
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(
+        800 + Math.random() * 400,   // 800~1200Hz 랜덤으로 변화감
+        audioCtx.currentTime
+      );
+      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.06);
+      osc.start(audioCtx.currentTime);
+      osc.stop(audioCtx.currentTime + 0.06);
+    }
+
+    let typingInterval = null;
+
+    function startTypingSound() {
+      if (!audioCtx) return;
+      stopTypingSound();
+      // 평균 120ms 간격, ±40ms 변동으로 자연스러운 타이핑 패턴
+      function scheduleNext() {
+        const delay = 80 + Math.random() * 80;
+        typingInterval = setTimeout(() => {
+          playTypingClick();
+          scheduleNext();
+        }, delay);
+      }
+      scheduleNext();
+    }
+
+    function stopTypingSound() {
+      if (typingInterval) { clearTimeout(typingInterval); typingInterval = null; }
+    }
+
+    // AudioContext는 사용자 인터랙션 없이 바로 생성 (Playwright 환경)
+    function initAudio() {
+      if (audioCtx) return;
+      try {
+        audioCtx = new AudioCtx();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        startTypingSound();
+      } catch(e) { /* 오디오 미지원 환경 무시 */ }
+    }
+
+    // 페이지 로드 직후 바로 시작 (Playwright는 user gesture 불필요)
+    window.addEventListener('load', initAudio);
+    document.addEventListener('click', initAudio, { once: true });
+
+    // ── 씬 전환 스크립트 ──────────────────────────────────────────────────
     const scenes = document.querySelectorAll('.scene');
     const progressBar = document.getElementById('progressBar');
-    
-    // Playwright가 캡처하기 전 폰트 등 로딩 감안 초기 지연 (선택)
+
     let currentIndex = 0;
-    const SCENE_DURATION_MS = 4000; // 씬 하나당 4초 배정
-    
-    // 진행바 애니메이션 초기화 (해당 씬 길이만큼)
-    if(scenes.length > 0) {
+    const SCENE_DURATION_MS = 4000; // 씬 하나당 4초
+
+    // 진행바 초기화
+    if (scenes.length > 0) {
       progressBar.style.transitionDuration = SCENE_DURATION_MS + 'ms';
       progressBar.style.width = '100%';
     }
 
     setInterval(() => {
       if (scenes.length <= 1) return;
-      
-      // 현재 씬 끄기
+
       scenes[currentIndex].classList.remove('active');
-      
-      // 다음 씬 인덱스
+
       currentIndex++;
       if (currentIndex >= scenes.length) {
-        // 영상은 어차피 파이프라인에서 끊기지만, JS 상으론 멈추거나 루프 반영
-        currentIndex = scenes.length - 1; 
+        currentIndex = scenes.length - 1;
       } else {
-        // 다음 씬 켜기
         scenes[currentIndex].classList.add('active');
-        
-        // 프로그레스 바 리셋 애니메이션 트릭
+
+        // 프로그레스 바 리셋
         progressBar.style.transitionDuration = '0ms';
         progressBar.style.width = '0%';
         setTimeout(() => {
@@ -231,7 +282,6 @@
           progressBar.style.width = '100%';
         }, 50);
       }
-
     }, SCENE_DURATION_MS);
   </script>
 </body>
