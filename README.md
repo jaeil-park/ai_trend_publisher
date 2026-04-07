@@ -16,6 +16,7 @@
 2. **LLM 기반 콘텐츠 정제 (AI Processing)**
    - **OpenAI (GPT-4o) 연동:** 수집된 여러 개의 뉴스를 최대 5개 단위(Chunking)로 묶어 '시퀀스(순차 전환)' 방식의 대본으로 요약합니다.
    - **JSON 스키마 강제:** 화면 가독성을 위해 후킹 타이틀(15자 이내)과 짧은 요약(2줄 이내)을 정확한 JSON 형태로 추출합니다.
+   - **AI 성우 & 자동 자막:** OpenAI TTS-1 모델로 자연스러운 나레이션을 생성하고, Whisper API를 통해 완벽히 동기화된 SRT 자막을 영상에 하드코딩(Burn-in) 합니다.
 
 3. **고해상도 영상 렌더링 (Rendering)**
    - **Playwright + FFmpeg:** HTML/CSS 템플릿(Jinja2)에 데이터를 주입한 뒤, Headless 브라우저로 화면을 캡처(WebM)하고 H.264/AAC 코덱의 MP4로 자동 인코딩합니다.

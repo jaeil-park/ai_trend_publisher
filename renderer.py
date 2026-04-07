@@ -19,6 +19,8 @@ def render_to_video(
     html_path: str | Path,
     output_path: str | Path,
     duration: int = RECORD_DURATION_SEC,
+    audio_path: str | Path | None = None,
+    srt_path: str | Path | None = None,
 ) -> Path:
     """
     HTML 파일을 Playwright로 열고 지정 시간(초) 동안 녹화 후 mp4를 반환한다.
@@ -27,6 +29,8 @@ def render_to_video(
         html_path:   렌더링할 HTML 파일 경로
         output_path: 저장할 mp4 파일 경로
         duration:    녹화 시간 (초, 기본 10)
+        audio_path:  합성할 외부 오디오(MP3 등) 파일 경로 (선택)
+        srt_path:    영상에 입힐 자막(SRT) 파일 경로 (선택)
 
     Returns:
         완성된 mp4 파일의 Path 객체
@@ -68,16 +72,16 @@ def render_to_video(
                 raise RuntimeError("Playwright did not produce a video file.")
 
             final = output_path.with_suffix(".mp4")
-            _webm_to_mp4(generated, final)
+            _webm_to_mp4(generated, final, audio_path, srt_path)
             return final
 
     except ImportError as e:
         raise RuntimeError("playwright 패키지가 설치되지 않았습니다: pip install playwright") from e
 
 
-def _webm_to_mp4(src: Path, dst: Path) -> None:
+def _webm_to_mp4(src: Path, dst: Path, audio_path: str | Path | None = None, srt_path: str | Path | None = None) -> None:
     """
-    ffmpeg로 webm → mp4(H.264/AAC) 변환 후 원본 webm 삭제.
+    ffmpeg로 webm → mp4(H.264/AAC) 변환 및 외부 오디오 합성 후 원본 webm 삭제.
 
     Raises:
         RuntimeError: ffmpeg 미설치 또는 변환 실패 시
@@ -91,14 +95,25 @@ def _webm_to_mp4(src: Path, dst: Path) -> None:
         "ffmpeg",
         "-y",                    # 덮어쓰기 허용
         "-i", str(src),
+    ]
+
+    if audio_path:
+        cmd.extend(["-i", str(audio_path)])
+
+    cmd.extend([
         "-c:v", "libx264",       # H.264 인코딩
         "-preset", "fast",
         "-crf", "18",            # 화질 (0=무손실, 51=최저, 18=고품질)
         "-pix_fmt", "yuv420p",   # 호환성 최대화
-        "-c:a", "aac",
-        "-movflags", "+faststart",  # 스트리밍 최적화
-        str(dst),
     ]
+    
+    if audio_path:
+        # 비디오는 첫 번째 입력(0:v:0), 오디오는 두 번째 입력(1:a:0) 매핑
+        cmd.extend(["-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0"])
+    else:
+        cmd.extend(["-c:a", "aac"])
+
+    cmd.extend(["-movflags", "+faststart", str(dst)])
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
