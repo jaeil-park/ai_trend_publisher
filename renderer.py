@@ -105,7 +105,7 @@ def _webm_to_mp4(src: Path, dst: Path, audio_path: str | Path | None = None, srt
         "-preset", "fast",
         "-crf", "18",            # 화질 (0=무손실, 51=최저, 18=고품질)
         "-pix_fmt", "yuv420p",   # 호환성 최대화
-    ]
+    ])
     
     if audio_path:
         # 비디오는 첫 번째 입력(0:v:0), 오디오는 두 번째 입력(1:a:0) 매핑
