@@ -111,44 +111,6 @@ def process_content_via_llm(items: list[NormalizedItem], max_retries: int = 3, r
 
 
 # ---------------------------------------------------------------------------
-# 오디오 (TTS) 및 자막 (SRT) 생성
-# ---------------------------------------------------------------------------
-
-def generate_tts(text: str, output_path: Path) -> Path | None:
-    """OpenAI TTS API를 사용하여 텍스트를 음성(mp3)으로 변환한다."""
-    print("[main] 🎙️ AI 성우(TTS) 오디오 생성 중...")
-    try:
-        with _client.audio.speech.with_streaming_response.create(
-            model="tts-1",
-            voice="nova",  # 세련되고 밝은 여성 성우 목소리로 변경 (릴스에 최적화)
-            input=text,
-            speed=1.0      # 1.25배속을 제거하여 4초 화면 전환 타이밍과 1:1 싱크를 맞춤
-        ) as response:
-            response.stream_to_file(str(output_path))
-        return output_path
-    except Exception as e:
-        print(f"[main] TTS 생성 실패: {e}")
-        return None
-
-
-def generate_srt_from_audio(audio_path: Path) -> Path | None:
-    """OpenAI Whisper API를 사용하여 오디오 파일에서 자막(SRT)을 추출한다."""
-    print("[main] 📝 오디오에서 자막(SRT) 추출 중...")
-    try:
-        srt_path = audio_path.with_suffix(".srt")
-        with audio_path.open("rb") as audio_file:
-            transcription = _client.audio.transcriptions.create(
-                model="whisper-1",
-                file=audio_file,
-                response_format="srt"
-            )
-        srt_path.write_text(transcription, encoding="utf-8")
-        return srt_path
-    except Exception as e:
-        print(f"[main] SRT 생성 실패: {e}")
-        return None
-
-# ---------------------------------------------------------------------------
 # 템플릿별 변수 주입
 # ---------------------------------------------------------------------------
 
@@ -216,8 +178,6 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
     item_chunks = [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
 
     for chunk_idx, chunk in enumerate(item_chunks):
-        tts_audio_path = None
-        tts_srt_path = None
         try:
             llm_data = process_content_via_llm(chunk)
             
@@ -226,41 +186,10 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
 
             output_path = output_dir / f"sequence_reel_{chunk_idx:03d}.mp4"
             
-            # [신규] TTS 오디오 텍스트 구성 및 생성
-            # 인트로 멘트를 제거하여 첫 번째 화면 전환과 음성 타이밍을 0초부터 정확히 일치시킴
-            tts_text = ""
-            for scene in llm_data.get("scenes", []):
-                # 구두점 대신 줄임표(...)를 사용하여 자연스러운 뜸(Pause)을 유도, 4초 화면과 싱크 동기화
-                title = str(scene.get('hook_title', '')).strip()
-                summary = str(scene.get('summary', '')).strip()
-                if title:
-                    tts_text += f"{title}... "
-                if summary:
-                    tts_text += f"{summary}... "
-            
-            if tts_text.strip():
-                tts_audio_path = output_dir / f"tts_{chunk_idx:03d}.mp3"
-                tts_audio_path = generate_tts(tts_text.strip(), tts_audio_path)
-                
-                # [신규] 생성된 오디오를 기반으로 자막(SRT) 추출
-                if tts_audio_path and tts_audio_path.exists():
-                    tts_srt_path = generate_srt_from_audio(tts_audio_path)
-
             # 동적 시간 설정: 장면당 4초 + 여유 1초
             scenes_count = len(llm_data.get("scenes", []))
             calc_duration = (scenes_count * 4) + 1
             
-            # [신규] 오디오 길이에 맞춰 비디오 녹화 시간 연장 (ffprobe 활용)
-            if tts_audio_path and tts_audio_path.exists():
-                try:
-                    cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(tts_audio_path)]
-                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                    a_dur = float(res.stdout.strip())
-                    if a_dur > calc_duration:
-                        calc_duration = int(a_dur) + 2  # 오디오가 더 길면 길이를 맞추고 2초 여유 추가
-                except Exception as e:
-                    print(f"[main] ffprobe 오디오 길이 추출 실패: {e}")
-
             if calc_duration < 5:
                 calc_duration = 5
 
@@ -271,8 +200,6 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
                 html_path=tmp_html, 
                 output_path=output_path, 
                 duration=calc_duration,
-                audio_path=tts_audio_path,
-                srt_path=tts_srt_path,
                 bgm_path=current_bgm
             )
 
@@ -289,11 +216,6 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
             tmp_path = Path("tmp_render_sequence.html")
             if tmp_path.exists():
                 tmp_path.unlink()
-            # 사용이 끝난 임시 오디오 파일 정리
-            if tts_audio_path and tts_audio_path.exists():
-                tts_audio_path.unlink()
-            if tts_srt_path and tts_srt_path.exists():
-                tts_srt_path.unlink()
 
     return results
 
