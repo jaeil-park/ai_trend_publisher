@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import re
 import os
 from typing import Any
 
@@ -90,5 +91,4 @@ class NewsApiCrawler:
 
 def _strip_tags(text: str) -> str:
     """Naver API 응답의 <b>, </b> 등 HTML 태그 제거."""
-    import re
     return re.sub(r"<[^>]+>", "", text)

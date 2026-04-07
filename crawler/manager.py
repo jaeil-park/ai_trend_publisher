@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 
+import difflib
 import json
 import time
 import os
@@ -11,8 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from crawler.news_api import NewsApiCrawler
-from crawler.community_scraper import CommunityScraper
+from .news_api import NewsApiCrawler
+from .community_scraper import CommunityScraper
 
 
 # 정규화된 아이템 타입
@@ -113,7 +114,6 @@ class CrawlerManager:
 
     def update_history(self, items: list[NormalizedItem]) -> None:
         """렌더링/업로드가 확정된 뉴스 항목들을 히스토리에 추가한다."""
-        history_file = Path("posted_history.json")
         history = self._load_history()
         now = datetime.now().timestamp()
         
@@ -150,7 +150,6 @@ class CrawlerManager:
 
     def _normalize(self, items: list[dict[str, Any]]) -> list[NormalizedItem]:
         """원시 데이터를 정규화하고 유사한 제목(중복 뉴스)을 제거한다."""
-        import difflib
         
         history = set(self._load_history().keys())
         normalized: list[NormalizedItem] = []

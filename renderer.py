@@ -21,6 +21,7 @@ def render_to_video(
     duration: int = RECORD_DURATION_SEC,
     audio_path: str | Path | None = None,
     srt_path: str | Path | None = None,
+    bgm_path: str | Path | None = None,
 ) -> Path:
     """
     HTML 파일을 Playwright로 열고 지정 시간(초) 동안 녹화 후 mp4를 반환한다.
@@ -31,6 +32,7 @@ def render_to_video(
         duration:    녹화 시간 (초, 기본 10)
         audio_path:  합성할 외부 오디오(MP3 등) 파일 경로 (선택)
         srt_path:    영상에 입힐 자막(SRT) 파일 경로 (선택)
+        bgm_path:    배경음악/효과음 파일 경로 (선택)
 
     Returns:
         완성된 mp4 파일의 Path 객체
@@ -59,8 +61,8 @@ def render_to_video(
             page = context.new_page()
             page.goto(html_path.as_uri())
 
-            # 10초 대기 (애니메이션 / 전환 효과 캡처)
-            time.sleep(duration)
+            # 지정된 시간 대기 (Playwright 내부 이벤트 루프 방해 방지)
+            page.wait_for_timeout(duration * 1000)
 
             page.close()
             context.close()
@@ -72,14 +74,14 @@ def render_to_video(
                 raise RuntimeError("Playwright did not produce a video file.")
 
             final = output_path.with_suffix(".mp4")
-            _webm_to_mp4(generated, final, audio_path, srt_path)
+            _webm_to_mp4(generated, final, audio_path, srt_path, bgm_path)
             return final
 
     except ImportError as e:
         raise RuntimeError("playwright 패키지가 설치되지 않았습니다: pip install playwright") from e
 
 
-def _webm_to_mp4(src: Path, dst: Path, audio_path: str | Path | None = None, srt_path: str | Path | None = None) -> None:
+def _webm_to_mp4(src: Path, dst: Path, audio_path: str | Path | None = None, srt_path: str | Path | None = None, bgm_path: str | Path | None = None) -> None:
     """
     ffmpeg로 webm → mp4(H.264/AAC) 변환 및 외부 오디오 합성 후 원본 webm 삭제.
 
@@ -99,6 +101,10 @@ def _webm_to_mp4(src: Path, dst: Path, audio_path: str | Path | None = None, srt
 
     if audio_path:
         cmd.extend(["-i", str(audio_path)])
+
+    if bgm_path:
+        # BGM이 짧은 효과음일 경우를 대비해 무한 반복(-stream_loop -1) 처리
+        cmd.extend(["-stream_loop", "-1", "-i", str(bgm_path)])
 
     cmd.extend([
         "-c:v", "libx264",       # H.264 인코딩

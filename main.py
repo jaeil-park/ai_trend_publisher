@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import os
-import re
 import json
+import random
 import time
 import subprocess
 from datetime import datetime
@@ -27,6 +27,7 @@ TEMPLATES: dict[str, Path] = {
     "chat": Path("templates/chat.html"),
     "news": Path("templates/news.html"),
 }
+BGM_PATH = Path("bgm.mp3")  # 효과음이나 타자 소리 등을 여기에 두면 자동 인식
 
 _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
 
@@ -89,6 +90,14 @@ def process_content_via_llm(items: list[NormalizedItem], max_retries: int = 3, r
                 return {"template_type": "news", "scenes": [], "instagram_caption": "요약 실패"}
     
     # JSON Parsing 안전 처리
+    res_str = res_str.strip()
+    if res_str.startswith("```json"):
+        res_str = res_str[7:]
+    if res_str.startswith("```"):
+        res_str = res_str[3:]
+    if res_str.endswith("```"):
+        res_str = res_str[:-3]
+    res_str = res_str.strip()
     try:
         data = json.loads(res_str)
     except json.JSONDecodeError:
@@ -111,9 +120,9 @@ def generate_tts(text: str, output_path: Path) -> Path | None:
     try:
         with _client.audio.speech.with_streaming_response.create(
             model="tts-1",
-            voice="onyx",  # 남성 목소리 (nova, shimmer 등 여성 목소리로 변경 가능)
+            voice="nova",  # 세련되고 밝은 여성 성우 목소리로 변경 (릴스에 최적화)
             input=text,
-            speed=1.25     # 숏폼 템포에 맞춰 말하기 속도를 1.25배로 빠르게
+            speed=1.0      # 1.25배속을 제거하여 4초 화면 전환 타이밍과 1:1 싱크를 맞춤
         ) as response:
             response.stream_to_file(str(output_path))
         return output_path
@@ -164,7 +173,7 @@ def inject_template_variables(llm_data: dict[str, Any]) -> str:
         published_at=today
     )
 
-    tmp_path = f"tmp_render_sequence.html"
+    tmp_path = "tmp_render_sequence.html"
     Path(tmp_path).write_text(rendered_html, encoding="utf-8")
     return tmp_path
 
@@ -180,7 +189,6 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
         [(비디오 경로, instagram_caption), ...]
     """
     if not query:
-        import random
         keyword_pool = [
             # 경제/사회/정책
             "서민 경제", "물가", "가성비", "지원금", "부동산", "주식 시장", "청년 정책", "재테크",
@@ -222,13 +230,13 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
             # 인트로 멘트를 제거하여 첫 번째 화면 전환과 음성 타이밍을 0초부터 정확히 일치시킴
             tts_text = ""
             for scene in llm_data.get("scenes", []):
-                # 구두점(.)을 두어 TTS가 문장 사이에서 자연스럽게 쉬도록 유도
+                # 구두점 대신 줄임표(...)를 사용하여 자연스러운 뜸(Pause)을 유도, 4초 화면과 싱크 동기화
                 title = str(scene.get('hook_title', '')).strip()
                 summary = str(scene.get('summary', '')).strip()
                 if title:
-                    tts_text += f"{title}. "
+                    tts_text += f"{title}... "
                 if summary:
-                    tts_text += f"{summary}. "
+                    tts_text += f"{summary}... "
             
             if tts_text.strip():
                 tts_audio_path = output_dir / f"tts_{chunk_idx:03d}.mp3"
@@ -246,7 +254,7 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
             if tts_audio_path and tts_audio_path.exists():
                 try:
                     cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(tts_audio_path)]
-                    res = subprocess.run(cmd, capture_output=True, text=True)
+                    res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                     a_dur = float(res.stdout.strip())
                     if a_dur > calc_duration:
                         calc_duration = int(a_dur) + 2  # 오디오가 더 길면 길이를 맞추고 2초 여유 추가
@@ -256,12 +264,16 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
             if calc_duration < 5:
                 calc_duration = 5
 
+            # [신규] 배경음악/효과음 파일 존재 여부 확인
+            current_bgm = BGM_PATH if BGM_PATH.exists() else None
+
             video = render_to_video(
                 html_path=tmp_html, 
                 output_path=output_path, 
                 duration=calc_duration,
                 audio_path=tts_audio_path,
-                srt_path=tts_srt_path
+                srt_path=tts_srt_path,
+                bgm_path=current_bgm
             )
 
             caption = llm_data.get("instagram_caption", "Trend Now News Sequence")
