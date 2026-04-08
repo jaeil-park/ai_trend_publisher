@@ -118,7 +118,7 @@ class InstagramUploader:
                         CATBOX_API,
                         data={"reqtype": "fileupload"},
                         files={"fileToUpload": f},
-                        timeout=120,
+                        timeout=60,
                     )
                 
                 if resp.status_code == 200 and resp.text.startswith("https://"):

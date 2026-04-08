@@ -174,9 +174,11 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
     output_dir.mkdir(exist_ok=True)
 
     results: list[tuple[Path, str]] = []
-    # 5개씩 묶기 (Chunking)
+    # 10개 뉴스를 5개씩 나눠 2개의 릴스 생성
+    items = items[:10]
     chunk_size = 5
     item_chunks = [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
+    print(f"[main] {len(items)}개 아이템 → {len(item_chunks)}개 릴스 생성 예정")
 
     for chunk_idx, chunk in enumerate(item_chunks):
         try:
