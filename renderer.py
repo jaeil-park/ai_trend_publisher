@@ -182,7 +182,7 @@ def _webm_to_mp4(src: Path, dst: Path, bgm_path: str | Path | None = None) -> No
     
     if bgm_path:
         # 비디오는 첫 번째 입력(0:v:0), 오디오는 두 번째 입력(1:a:0) 매핑
-        cmd.extend(["-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0"])
+        cmd.extend(["-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0", "-shortest"])
     else:
         cmd.extend(["-c:a", "aac"])
 
