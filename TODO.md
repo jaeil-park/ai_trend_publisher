@@ -11,6 +11,8 @@
 - [x] **[신규]** 모든 템플릿(news, chat, receipt) 720x1280 (9:16) 상대단위(vw/vh) 반응형 스케일링 적용
 - [x] **[신규]** META 공식 Instagram Graph API 업로더 개발 (Catbox 미디어 브릿지 연동)
 - [x] **[신규]** GitHub Actions 자동 업로드 워크플로우 구성 (`auto_upload.yml`)
+- [x] **[개선]** 대본 텍스트 분량 분석 기반 렌더링 녹화 시간 동적 할당 기능 추가
+- [x] **[개선]** Instagram Graph API 장기 토큰 자동 갱신(Refresh) 로직 탑재
 - [x] 민감 세션/미디어 파일 GitHub 노출 방지 (`.gitignore` 및 `git rm --cached`)
 
 ## 최종 남은 작업 (Next & Final)

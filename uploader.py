@@ -45,6 +45,9 @@ class InstagramUploader:
             print("[uploader] INSTAGRAM_ACCESS_TOKEN 환경변수가 누락되었습니다.")
             return False
 
+        # 로그인 시 장기 토큰 수명 연장 (Token Refresh)
+        self._refresh_token()
+
         try:
             resp = requests.get(
                 f"{GRAPH_BASE}/me",
@@ -94,7 +97,7 @@ class InstagramUploader:
 
             print(f"[uploader] ✅ 릴스 게시 완료! media_id={media_id}")
             self._archive(video_path)
-            
+
             delay = random.uniform(5, 10)
             time.sleep(delay)
             return True
@@ -106,6 +109,28 @@ class InstagramUploader:
     # ------------------------------------------------------------------
     # 내부 단계 (브릿지 -> IG 연동)
     # ------------------------------------------------------------------
+
+    def _refresh_token(self) -> None:
+        """장기 실행 토큰의 유효 기간을 갱신한다."""
+        print("[uploader] Instagram 장기 토큰 갱신 시도...")
+        try:
+            resp = requests.get(
+                f"{GRAPH_BASE}/refresh_access_token",
+                params={
+                    "grant_type": "ig_refresh_token",
+                    "access_token": self.access_token,
+                },
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                new_token = resp.json().get("access_token")
+                if new_token:
+                    self.access_token = new_token
+                    print("[uploader] ✅ 토큰 갱신 성공 (만료 기간 연장됨)")
+            else:
+                print(f"[uploader] ⚠️ 토큰 갱신 실패 (무시됨): {resp.text}")
+        except Exception as e:
+            print(f"[uploader] ⚠️ 토큰 갱신 에러: {e}")
 
     def _upload_to_catbox(self, video_path: Path) -> str | None:
         """Catbox에 파일을 업로드하여 Public URL을 얻어낸다."""

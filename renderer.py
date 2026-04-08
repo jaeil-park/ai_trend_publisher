@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 import random
+import re
 import shutil
 import struct
 import subprocess
@@ -18,6 +19,24 @@ VIEWPORT_WIDTH = 720
 VIEWPORT_HEIGHT = 1280
 RECORD_DURATION_SEC = 10
 
+
+def _calculate_dynamic_duration(html_path: Path, min_duration: int = RECORD_DURATION_SEC) -> int:
+    """HTML 내부 텍스트 길이를 바탕으로 적정 녹화 시간(초)을 동적으로 계산한다."""
+    try:
+        content = html_path.read_text(encoding='utf-8')
+        # script, style 태그 제거
+        content = re.sub(r'<(script|style).*?>.*?</\1>', '', content, flags=re.DOTALL)
+        # 모든 HTML 태그 및 공백 제거
+        text = re.sub(r'<[^>]+>', '', content)
+        text = re.sub(r'\s+', '', text)
+        
+        # 한국어 평균 시각적 읽기 속도 (초당 약 8글자) + 트랜지션 여유 3초
+        calculated = int(len(text) / 8) + 3
+        
+        return max(min_duration, min(calculated, 60))
+    except Exception as e:
+        print(f"[renderer] 동적 길이 계산 실패, 기본값 사용: {e}")
+        return min_duration
 
 def generate_typing_bgm(output_path: str | Path, duration_sec: int = 60) -> Path:
     """
@@ -80,6 +99,11 @@ def render_to_video(
     """
     html_path = Path(html_path).resolve()
     output_path = Path(output_path).resolve()
+
+    # 기본 녹화 시간(10초)이 그대로 들어왔다면 대본 길이에 맞춰 동적 계산 수행
+    if duration == RECORD_DURATION_SEC:
+        duration = _calculate_dynamic_duration(html_path)
+        print(f"[renderer] 대본 텍스트 분량을 분석하여 녹화 시간을 {duration}초로 설정합니다.")
 
     if not html_path.exists():
         raise FileNotFoundError(f"HTML not found: {html_path}")
