@@ -202,7 +202,7 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
             else:
                 if not TYPING_BGM_PATH.exists():
                     print("[main] typing_bgm.wav 생성 중...")
-                    generate_typing_bgm(TYPING_BGM_PATH, duration_sec=calc_duration + 5)
+                    generate_typing_bgm(TYPING_BGM_PATH, duration_sec=120)
                 current_bgm = TYPING_BGM_PATH
 
             video = render_to_video(

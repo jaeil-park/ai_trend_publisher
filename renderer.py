@@ -144,14 +144,14 @@ def render_to_video(
                 raise RuntimeError("Playwright did not produce a video file.")
 
             final = output_path.with_suffix(".mp4")
-            _webm_to_mp4(generated, final, bgm_path)
+            _webm_to_mp4(generated, final, bgm_path, duration)
             return final
 
     except ImportError as e:
         raise RuntimeError("playwright 패키지가 설치되지 않았습니다: pip install playwright") from e
 
 
-def _webm_to_mp4(src: Path, dst: Path, bgm_path: str | Path | None = None) -> None:
+def _webm_to_mp4(src: Path, dst: Path, bgm_path: str | Path | None = None, duration: int | None = None) -> None:
     """
     ffmpeg로 webm → mp4(H.264/AAC) 변환 및 BGM 합성 후 원본 webm 삭제.
 
@@ -182,13 +182,23 @@ def _webm_to_mp4(src: Path, dst: Path, bgm_path: str | Path | None = None) -> No
     
     if bgm_path:
         # 비디오는 첫 번째 입력(0:v:0), 오디오는 두 번째 입력(1:a:0) 매핑
-        cmd.extend(["-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0", "-shortest"])
+        cmd.extend(["-c:a", "aac", "-map", "0:v:0", "-map", "1:a:0"])
     else:
         cmd.extend(["-c:a", "aac"])
 
+    # -shortest 대신 정확한 -t (초)를 명시하여 stream_loop 무한 루프 버그 방지
+    if duration is not None:
+        cmd.extend(["-t", str(duration)])
+    elif bgm_path:
+        cmd.append("-shortest")
+
     cmd.extend(["-movflags", "+faststart", str(dst)])
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"FFmpeg 인코딩이 타임아웃(120초) 되었습니다. (무한 루프 방지)\n{e}")
+
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg 변환 실패:\n{result.stderr}")
 
