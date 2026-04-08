@@ -89,7 +89,11 @@ def render_to_video(
         from playwright.sync_api import sync_playwright  # type: ignore
 
         with sync_playwright() as p:
-            browser = p.chromium.launch()
+            browser = p.chromium.launch(args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+            ])
             context = browser.new_context(
                 viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
                 record_video_dir=str(output_path.parent),
@@ -98,9 +102,9 @@ def render_to_video(
             page = context.new_page()
             page.goto(html_path.as_uri())
 
-            # 페이지 완전 로딩 대기 (흰 배경 프레임 방지)
-            page.wait_for_load_state("networkidle", timeout=10000)
-            # 폰트/CSS 렌더링 안정화 대기
+            # DOM 로딩 완료 대기 (networkidle 대신 사용 — CDN 폰트 대기 불필요)
+            page.wait_for_load_state("domcontentloaded", timeout=5000)
+            # 렌더링 안정화 대기
             page.wait_for_timeout(500)
 
             # 지정된 시간 대기 (Playwright 내부 이벤트 루프 방해 방지)
