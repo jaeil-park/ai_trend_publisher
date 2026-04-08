@@ -24,6 +24,31 @@ class CommunityScraper:
             "Sec-Fetch-Mode": "navigate"
         }
 
+    def _get_html(self, url: str) -> str:
+        """requests로 HTML을 가져오고, 봇 차단(WAF) 감지 시 Playwright 브라우저로 우회한다."""
+        try:
+            resp = requests.get(url, headers=self.headers, timeout=10)
+            resp.raise_for_status()
+            return resp.text
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response else 0
+            # 403(Cloudflare), 410(Clien), 429(Too Many Requests), 430(FMKorea) 차단 감지
+            if status in (403, 410, 429, 430):
+                print(f"[{self.site}] HTTP {status} 차단 감지. 브라우저 우회를 시도합니다...")
+                try:
+                    from playwright.sync_api import sync_playwright
+                    with sync_playwright() as p:
+                        browser = p.chromium.launch(args=["--no-sandbox", "--disable-setuid-sandbox"])
+                        context = browser.new_context(user_agent=self.headers["User-Agent"])
+                        page = context.new_page()
+                        page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                        html = page.content()
+                        browser.close()
+                        return html
+                except Exception as pw_e:
+                    print(f"[{self.site}] 브라우저 우회 실패: {pw_e}")
+            raise  # 우회 실패 시 원래 에러를 던져 재시도 로직(CrawlerManager)을 태움
+
     def fetch(self, board: str = "hot") -> list[dict[str, Any]]:
         """해당 사이트의 핫게시물 목록을 가져온다."""
         items: list[dict[str, Any]] = []
@@ -38,9 +63,8 @@ class CommunityScraper:
     def _fetch_dcinside(self, board: str) -> list[dict[str, Any]]:
         # 디시인사이드 실시간 베스트 갤러리 (실베)
         url = "https://gall.dcinside.com/board/lists/?id=dcbest"
-        resp = requests.get(url, headers=self.headers, timeout=10)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
+        html = self._get_html(url)
+        soup = BeautifulSoup(html, "html.parser")
         
         items = []
         # 일반 게시물 행(tr) 파싱
@@ -61,9 +85,8 @@ class CommunityScraper:
     def _fetch_fmkorea(self, board: str) -> list[dict[str, Any]]:
         # 에펨코리아 포텐 터짐 게시판
         url = "https://www.fmkorea.com/best"
-        resp = requests.get(url, headers=self.headers, timeout=10)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
+        html = self._get_html(url)
+        soup = BeautifulSoup(html, "html.parser")
         
         items = []
         for li in soup.select(".fm_best_board li"):
@@ -87,9 +110,8 @@ class CommunityScraper:
     def _fetch_clien(self, board: str) -> list[dict[str, Any]]:
         # 클리앙 공감게시물
         url = "https://www.clien.net/service/recommend"
-        resp = requests.get(url, headers=self.headers, timeout=10)
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "html.parser")
+        html = self._get_html(url)
+        soup = BeautifulSoup(html, "html.parser")
         
         items = []
         for item in soup.select(".list_item"):
