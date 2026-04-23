@@ -1,11 +1,16 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Breaking News UI Sequence</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
     body {
       width: 100vw;
@@ -44,14 +49,17 @@
     /* 각 뉴스 씬 */
     .scene {
       position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
       display: flex;
       flex-direction: column;
       justify-content: center;
       padding: 6vh 8vw;
       gap: 4vh;
       max-width: 100%;
-      
+
       /* 전환 애니메이션 처리 */
       opacity: 0;
       transition: opacity 0.8s ease-in-out;
@@ -64,15 +72,49 @@
     }
 
     /* 텍스트 요소들 - 애니메이션 클래스 적용 시 동작 */
-    .scene .news-tag     { transform: translateY(30px); opacity: 0; transition: all 0.6s ease 0.2s; }
-    .scene .news-headline{ transform: translateY(30px); opacity: 0; transition: all 0.6s ease 0.4s; }
-    .scene .news-summary { transform: translateY(30px); opacity: 0; transition: all 0.6s ease 0.6s; }
-    .scene .news-source  { transform: translateY(30px); opacity: 0; transition: all 0.6s ease 0.8s; }
+    .scene .news-tag {
+      transform: translateY(30px);
+      opacity: 0;
+      transition: all 0.6s ease 0.2s;
+    }
 
-    .scene.active .news-tag     { transform: translateY(0); opacity: 1; }
-    .scene.active .news-headline{ transform: translateY(0); opacity: 1; }
-    .scene.active .news-summary { transform: translateY(0); opacity: 1; }
-    .scene.active .news-source  { transform: translateY(0); opacity: 1; }
+    .scene .news-headline {
+      transform: translateY(30px);
+      opacity: 0;
+      transition: all 0.6s ease 0.4s;
+    }
+
+    .scene .news-summary {
+      transform: translateY(30px);
+      opacity: 0;
+      transition: all 0.6s ease 0.6s;
+    }
+
+    .scene .news-source {
+      transform: translateY(30px);
+      opacity: 0;
+      transition: all 0.6s ease 0.8s;
+    }
+
+    .scene.active .news-tag {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .scene.active .news-headline {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .scene.active .news-summary {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .scene.active .news-source {
+      transform: translateY(0);
+      opacity: 1;
+    }
 
     /* 모듈별 스타일 */
     .news-tag {
@@ -134,15 +176,16 @@
       width: 100%;
       background: #333;
     }
+
     .progress-bar {
       height: 100%;
       background: #e60000;
       width: 0%;
       transition: width linear;
     }
-
   </style>
 </head>
+
 <body>
   <div class="news-ticker">🔴 오늘의 핫이슈 · TREND NOW</div>
 
@@ -158,7 +201,9 @@
     {% endfor %}
   </div>
 
-  <div class="progress-bar-container"><div class="progress-bar" id="progressBar"></div></div>
+  <div class="progress-bar-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
 
   <div class="news-footer">
     <div class="logo">TREND NOW</div>
@@ -169,32 +214,32 @@
     // JS 씬 (Scene) 전환 스크립트
     const scenes = document.querySelectorAll('.scene');
     const progressBar = document.getElementById('progressBar');
-    
+
     // Playwright가 캡처하기 전 폰트 등 로딩 감안 초기 지연 (선택)
     let currentIndex = 0;
     const SCENE_DURATION_MS = 4000; // 씬 하나당 4초 배정
-    
+
     // 진행바 애니메이션 초기화 (해당 씬 길이만큼)
-    if(scenes.length > 0) {
+    if (scenes.length > 0) {
       progressBar.style.transitionDuration = SCENE_DURATION_MS + 'ms';
       progressBar.style.width = '100%';
     }
 
     setInterval(() => {
       if (scenes.length <= 1) return;
-      
+
       // 현재 씬 끄기
       scenes[currentIndex].classList.remove('active');
-      
+
       // 다음 씬 인덱스
       currentIndex++;
       if (currentIndex >= scenes.length) {
         // 영상은 어차피 파이프라인에서 끊기지만, JS 상으론 멈추거나 루프 반영
-        currentIndex = scenes.length - 1; 
+        currentIndex = scenes.length - 1;
       } else {
         // 다음 씬 켜기
         scenes[currentIndex].classList.add('active');
-        
+
         // 프로그레스 바 리셋 애니메이션 트릭
         progressBar.style.transitionDuration = '0ms';
         progressBar.style.width = '0%';
@@ -207,4 +252,5 @@
     }, SCENE_DURATION_MS);
   </script>
 </body>
+
 </html>
