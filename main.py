@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import os
-import re
 import json
+import random
+import time
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -34,7 +36,7 @@ _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 # LLM 템플릿 선택 및 데이터 추출
 # ---------------------------------------------------------------------------
 
-def process_content_via_llm(items: list[NormalizedItem]) -> dict[str, Any]:
+def process_content_via_llm(items: list[NormalizedItem], max_retries: int = 3, retry_delay: float = 2.0) -> dict[str, Any]:
     """
     OpenAI API를 호출하여 여러 개의 뉴스/게시물을 하나의 시퀀스(news_sequence) 템플릿용으로 요약한다.
     결과 JSON 스키마 강제.
@@ -56,26 +58,45 @@ def process_content_via_llm(items: list[NormalizedItem]) -> dict[str, Any]:
   "instagram_caption": "인스타그램 릴스 본문에 들어갈 찰진 전체 요약 설명 (2~3줄) + 관련 한국어 해시태그 5개",
   "scenes": [
     {{
-      "hook_title": "해당 뉴스의 첫 3초 시선을 끌 강력한 헤드라인 (15자 이내)",
-      "summary": "화면에서 4초 안에 읽히도록 아주 짧고 간결한 핵심 요약 (2줄 이내)",
+      "hook_title": "해당 뉴스의 첫 3초 시선을 끌 강력한 헤드라인 (10자 이내)",
+      "summary": "화면에서 4초 안에 읽히도록 아주 짧고 간결한 핵심 요약 (띄어쓰기 포함 25자 이내)",
       "source": "해당 출처명"
     }}
   ]
 }}
 """
 
-    resp = _client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction="너는 숏폼(릴스) 콘텐츠 전문 바이럴 마케터이자 데이터 정제 AI야. 오직 JSON만 응답상태로 반환해.",
-            temperature=0.7,
-            response_mime_type="application/json",
-        )
-    )
-    res_str = resp.text or "{}"
+    res_str = ""
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = _client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction="너는 숏폼(릴스) 콘텐츠 전문 바이럴 마케터이자 데이터 정제 AI야. 오직 JSON만 응답상태로 반환해.",
+                    temperature=0.7,
+                    response_mime_type="application/json",
+                )
+            )
+            res_str = resp.text or "{}"
+            break
+        except Exception as e:
+            print(f"[main] Gemini API 호출 에러 (attempt {attempt}/{max_retries}): {e}")
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+            else:
+                print("[main] Gemini API 최종 실패. 빈 데이터를 반환합니다.")
+                return {"template_type": "news", "scenes": [], "instagram_caption": "요약 실패"}
     
     # JSON Parsing 안전 처리
+    res_str = res_str.strip()
+    if res_str.startswith("```json"):
+        res_str = res_str[7:]
+    if res_str.startswith("```"):
+        res_str = res_str[3:]
+    if res_str.endswith("```"):
+        res_str = res_str[:-3]
+    res_str = res_str.strip()
     try:
         data = json.loads(res_str)
     except json.JSONDecodeError:
@@ -113,7 +134,7 @@ def inject_template_variables(llm_data: dict[str, Any]) -> str:
         published_at=today
     )
 
-    tmp_path = f"tmp_render_sequence.html"
+    tmp_path = "tmp_render_sequence.html"
     Path(tmp_path).write_text(rendered_html, encoding="utf-8")
     return tmp_path
 
@@ -121,13 +142,25 @@ def inject_template_variables(llm_data: dict[str, Any]) -> str:
 # 파이프라인
 # ---------------------------------------------------------------------------
 
-def run_pipeline(query: str = "가성비 핫이슈") -> list[tuple[Path, str]]:
+def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
     """
     전체 파이프라인 실행: 크롤 → 템플릿 전처리(OpenAI) → 렌더링
 
     Returns:
         [(비디오 경로, instagram_caption), ...]
     """
+    if not query:
+        keyword_pool = [
+            # 경제/사회/정책
+            "서민 경제", "물가", "가성비", "지원금", "부동산", "주식 시장", "청년 정책", "재테크",
+            # IT/테크/과학
+            "신제품", "AI 트렌드", "테크 핫이슈", "스마트폰", "모빌리티", "게임 신작", "우주 항공",
+            # 엔터/라이프/트렌드
+            "OTT 신작", "K팝 트렌드", "영화 개봉", "여행 핫플레이스", "건강 관리", "직장인 공감", "팝업스토어"
+        ]
+        query = random.choice(keyword_pool)
+        print(f"[main] 🎲 랜덤 검색어 선택: '{query}'")
+
     manager = CrawlerManager()
     items = manager.collect(query=query)
 
@@ -139,9 +172,11 @@ def run_pipeline(query: str = "가성비 핫이슈") -> list[tuple[Path, str]]:
     output_dir.mkdir(exist_ok=True)
 
     results: list[tuple[Path, str]] = []
-    # 5개씩 묶기 (Chunking)
+    # 10개 뉴스를 5개씩 나눠 2개의 릴스 생성
+    items = items[:10]
     chunk_size = 5
     item_chunks = [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
+    print(f"[main] {len(items)}개 아이템 → {len(item_chunks)}개 릴스 생성 예정")
 
     for chunk_idx, chunk in enumerate(item_chunks):
         try:
@@ -155,6 +190,7 @@ def run_pipeline(query: str = "가성비 핫이슈") -> list[tuple[Path, str]]:
             # 동적 시간 설정: 장면당 4초 + 여유 1초
             scenes_count = len(llm_data.get("scenes", []))
             calc_duration = (scenes_count * 4) + 1
+            
             if calc_duration < 5:
                 calc_duration = 5
 
@@ -167,6 +203,9 @@ def run_pipeline(query: str = "가성비 핫이슈") -> list[tuple[Path, str]]:
             caption = llm_data.get("instagram_caption", "Trend Now News Sequence")
             results.append((video, caption))
             print(f"[main] 완료: {video} (총 {scenes_count}개 장면, {calc_duration}초)")
+
+            # [신규] 렌더링이 성공적으로 완료된 청크(Chunk)의 기사들을 히스토리에 기록
+            manager.update_history(chunk)
 
         except Exception as e:
             print(f"[main] 처리 실패 (Chunk {chunk_idx}): {e}")

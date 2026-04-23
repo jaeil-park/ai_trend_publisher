@@ -3,6 +3,9 @@ Playwright 기반 렌더러 — HTML 템플릿을 1080×1920 mp4로 녹화한다
 """
 from __future__ import annotations
 
+import math
+import random
+import re
 import shutil
 import subprocess
 import time
@@ -15,10 +18,28 @@ VIEWPORT_HEIGHT = 1280
 RECORD_DURATION_SEC = 10
 
 
+def _calculate_dynamic_duration(html_path: Path, min_duration: int = RECORD_DURATION_SEC) -> int:
+    """HTML 내부 텍스트 길이를 바탕으로 적정 녹화 시간(초)을 동적으로 계산한다."""
+    try:
+        content = html_path.read_text(encoding='utf-8')
+        # script, style 태그 제거
+        content = re.sub(r'<(script|style).*?>.*?</\1>', '', content, flags=re.DOTALL)
+        # 모든 HTML 태그 및 공백 제거
+        text = re.sub(r'<[^>]+>', '', content)
+        text = re.sub(r'\s+', '', text)
+        
+        # 한국어 평균 시각적 읽기 속도 (초당 약 8글자) + 트랜지션 여유 3초
+        calculated = int(len(text) / 8) + 3
+        
+        return max(min_duration, min(calculated, 60))
+    except Exception as e:
+        print(f"[renderer] 동적 길이 계산 실패, 기본값 사용: {e}")
+        return min_duration
+
 def render_to_video(
     html_path: str | Path,
     output_path: str | Path,
-    duration: int = RECORD_DURATION_SEC,
+    duration: int = RECORD_DURATION_SEC
 ) -> Path:
     """
     HTML 파일을 Playwright로 열고 지정 시간(초) 동안 녹화 후 mp4를 반환한다.
@@ -38,6 +59,11 @@ def render_to_video(
     html_path = Path(html_path).resolve()
     output_path = Path(output_path).resolve()
 
+    # 기본 녹화 시간(10초)이 그대로 들어왔다면 대본 길이에 맞춰 동적 계산 수행
+    if duration == RECORD_DURATION_SEC:
+        duration = _calculate_dynamic_duration(html_path)
+        print(f"[renderer] 대본 텍스트 분량을 분석하여 녹화 시간을 {duration}초로 설정합니다.")
+
     if not html_path.exists():
         raise FileNotFoundError(f"HTML not found: {html_path}")
 
@@ -46,7 +72,11 @@ def render_to_video(
         from playwright.sync_api import sync_playwright  # type: ignore
 
         with sync_playwright() as p:
-            browser = p.chromium.launch()
+            browser = p.chromium.launch(args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+            ])
             context = browser.new_context(
                 viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
                 record_video_dir=str(output_path.parent),
@@ -55,8 +85,13 @@ def render_to_video(
             page = context.new_page()
             page.goto(html_path.as_uri())
 
-            # 10초 대기 (애니메이션 / 전환 효과 캡처)
-            time.sleep(duration)
+            # DOM 로딩 완료 대기 (networkidle 대신 사용 — CDN 폰트 대기 불필요)
+            page.wait_for_load_state("domcontentloaded", timeout=5000)
+            # 렌더링 안정화 대기
+            page.wait_for_timeout(500)
+
+            # 지정된 시간 대기 (Playwright 내부 이벤트 루프 방해 방지)
+            page.wait_for_timeout(duration * 1000)
 
             page.close()
             context.close()
@@ -68,16 +103,16 @@ def render_to_video(
                 raise RuntimeError("Playwright did not produce a video file.")
 
             final = output_path.with_suffix(".mp4")
-            _webm_to_mp4(generated, final)
+            _webm_to_mp4(generated, final, duration)
             return final
 
     except ImportError as e:
         raise RuntimeError("playwright 패키지가 설치되지 않았습니다: pip install playwright") from e
 
 
-def _webm_to_mp4(src: Path, dst: Path) -> None:
+def _webm_to_mp4(src: Path, dst: Path, duration: int | None = None) -> None:
     """
-    ffmpeg로 webm → mp4(H.264/AAC) 변환 후 원본 webm 삭제.
+    ffmpeg로 webm → mp4(H.264) 변환 후 원본 webm 삭제.
 
     Raises:
         RuntimeError: ffmpeg 미설치 또는 변환 실패 시
@@ -91,16 +126,25 @@ def _webm_to_mp4(src: Path, dst: Path) -> None:
         "ffmpeg",
         "-y",                    # 덮어쓰기 허용
         "-i", str(src),
+    ]
+
+    cmd.extend([
         "-c:v", "libx264",       # H.264 인코딩
         "-preset", "fast",
         "-crf", "18",            # 화질 (0=무손실, 51=최저, 18=고품질)
         "-pix_fmt", "yuv420p",   # 호환성 최대화
-        "-c:a", "aac",
-        "-movflags", "+faststart",  # 스트리밍 최적화
-        str(dst),
-    ]
+    ])
+    
+    if duration is not None:
+        cmd.extend(["-t", str(duration)])
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    cmd.extend(["-movflags", "+faststart", str(dst)])
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"FFmpeg 인코딩이 타임아웃(120초) 되었습니다. (무한 루프 방지)\n{e}")
+
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg 변환 실패:\n{result.stderr}")
 
