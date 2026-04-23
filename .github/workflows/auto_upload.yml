@@ -35,7 +35,7 @@ jobs:
       - name: 🚀 파이프라인 실행
         run: python main.py
         env:
-          OPENAI_API_KEY:         ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY:         ${{ secrets.GEMINI_API_KEY }}
           NEWSAPI_KEY:            ${{ secrets.NEWSAPI_KEY }}
           NAVER_CLIENT_ID:        ${{ secrets.NAVER_CLIENT_ID }}
           NAVER_CLIENT_SECRET:    ${{ secrets.NAVER_CLIENT_SECRET }}
