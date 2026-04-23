@@ -12,7 +12,8 @@ from typing import Any
 
 import jinja2
 from dotenv import load_dotenv
-from openai import OpenAI
+from google import genai
+from google.genai import types
 
 from crawler.manager import CrawlerManager, NormalizedItem
 from renderer import render_to_video
@@ -26,7 +27,7 @@ TEMPLATES: dict[str, Path] = {
     "news": Path("templates/news.html"),
 }
 
-_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY", ""))
+_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
 # ---------------------------------------------------------------------------
@@ -63,16 +64,16 @@ def process_content_via_llm(items: list[NormalizedItem]) -> dict[str, Any]:
 }}
 """
 
-    resp = _client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "너는 숏폼(릴스) 콘텐츠 전문 바이럴 마케터이자 데이터 정제 AI야. 오직 JSON만 응답상태로 반환해."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        response_format={"type": "json_object"}
+    resp = _client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction="너는 숏폼(릴스) 콘텐츠 전문 바이럴 마케터이자 데이터 정제 AI야. 오직 JSON만 응답상태로 반환해.",
+            temperature=0.7,
+            response_mime_type="application/json",
+        )
     )
-    res_str = resp.choices[0].message.content or "{}"
+    res_str = resp.text or "{}"
     
     # JSON Parsing 안전 처리
     try:
