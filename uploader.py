@@ -139,10 +139,14 @@ class InstagramUploader:
         for attempt in range(1, max_retries + 1):
             try:
                 with video_path.open("rb") as f:
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+                    }
                     resp = requests.post(
                         CATBOX_API,
                         data={"reqtype": "fileupload"},
                         files={"fileToUpload": f},
+                        headers=headers,
                         timeout=60,
                     )
                 

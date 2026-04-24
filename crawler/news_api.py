@@ -85,6 +85,15 @@ class NewsApiCrawler:
         resp.raise_for_status()
         data = resp.json()
 
+        return [
+            {
+                "title": _strip_tags(item.get("title") or ""),
+                "content": _strip_tags(item.get("description") or ""),
+                "source": item.get("link") or "Naver News",
+            }
+            for item in data.get("items", [])
+        ]
+
     def _fetch_kakao(self, query: str, max_results: int) -> list[dict[str, Any]]:
         headers = {"Authorization": f"KakaoAK {self.kakao_api_key}"}
         # 블로그와 카페에서 각각 절반씩 수집
