@@ -1,6 +1,6 @@
 """
-뉴스 API 크롤러 — NewsAPI(글로벌) + Naver News API(국내) 이중 소스
-환경변수: NEWSAPI_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET
+뉴스 API 크롤러 — NewsAPI(글로벌) + Naver News API(국내) + Kakao Search API(바이럴) 이중 소스
+환경변수: NEWSAPI_KEY, NAVER_CLIENT_ID, NAVER_CLIENT_SECRET, KAKAO_API_KEY
 """
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ load_dotenv()
 
 _NEWSAPI_URL = "https://newsapi.org/v2/everything"
 _NAVER_URL = "https://openapi.naver.com/v1/search/news.json"
+_KAKAO_BLOG_URL = "https://dapi.kakao.com/v2/search/blog"
+_KAKAO_CAFE_URL = "https://dapi.kakao.com/v2/search/cafe"
 
 
 class NewsApiCrawler:
@@ -24,6 +26,7 @@ class NewsApiCrawler:
         self.newsapi_key = api_key or os.getenv("NEWSAPI_KEY", "")
         self.naver_client_id = os.getenv("NAVER_CLIENT_ID", "")
         self.naver_client_secret = os.getenv("NAVER_CLIENT_SECRET", "")
+        self.kakao_api_key = os.getenv("KAKAO_API_KEY", "")
 
     def fetch(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
@@ -40,10 +43,13 @@ class NewsApiCrawler:
         if self.naver_client_id and self.naver_client_secret:
             items.extend(self._fetch_naver(query, max_results))
 
+        if self.kakao_api_key:
+            items.extend(self._fetch_kakao(query, max_results))
+
         if not items:
             raise RuntimeError(
-                "유효한 API 키가 없습니다. .env에 NEWSAPI_KEY 또는 "
-                "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET 를 설정하세요."
+                "유효한 API 키가 없습니다. .env에 NEWSAPI_KEY, NAVER_CLIENT_ID, "
+                "또는 KAKAO_API_KEY 를 설정하세요."
             )
 
         return items[:max_results]
@@ -79,14 +85,28 @@ class NewsApiCrawler:
         resp.raise_for_status()
         data = resp.json()
 
-        return [
-            {
-                "title": _strip_tags(item.get("title") or ""),
-                "content": _strip_tags(item.get("description") or ""),
-                "source": item.get("originallink") or "Naver News",
-            }
-            for item in data.get("items", [])
-        ]
+    def _fetch_kakao(self, query: str, max_results: int) -> list[dict[str, Any]]:
+        headers = {"Authorization": f"KakaoAK {self.kakao_api_key}"}
+        # 블로그와 카페에서 각각 절반씩 수집
+        size_per_source = max(1, max_results // 2)
+        params = {"query": query, "size": size_per_source, "sort": "recency"}
+        
+        results = []
+        for url in [_KAKAO_BLOG_URL, _KAKAO_CAFE_URL]:
+            try:
+                resp = requests.get(url, headers=headers, params=params, timeout=10)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for doc in data.get("documents", []):
+                        results.append({
+                            "title": _strip_tags(doc.get("title", "")),
+                            "content": _strip_tags(doc.get("contents", "")),
+                            "source": doc.get("url") or "Kakao Search",
+                        })
+            except Exception as e:
+                print(f"[NewsApiCrawler] Kakao API error ({url}): {e}")
+                
+        return results
 
 
 def _strip_tags(text: str) -> str:

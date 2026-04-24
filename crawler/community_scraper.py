@@ -7,7 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 
 class CommunityScraper:
-    SUPPORTED_SITES = ["dcinside", "fmkorea", "clien"]
+    SUPPORTED_SITES = ["dcinside", "ruliweb", "clien"]
 
     def __init__(self, site: str) -> None:
         if site not in self.SUPPORTED_SITES:
@@ -54,8 +54,8 @@ class CommunityScraper:
         items: list[dict[str, Any]] = []
         if self.site == "dcinside":
             items = self._fetch_dcinside(board)
-        elif self.site == "fmkorea":
-            items = self._fetch_fmkorea(board)
+        elif self.site == "ruliweb":
+            items = self._fetch_ruliweb(board)
         elif self.site == "clien":
             items = self._fetch_clien(board)
         return items
@@ -82,34 +82,27 @@ class CommunityScraper:
             
         return items[:10]  # 상위 10개만 추출
 
-    def _fetch_fmkorea(self, board: str) -> list[dict[str, Any]]:
-        # 에펨코리아 포텐 터짐 게시판
-        url = "https://www.fmkorea.com/best"
+    def _fetch_ruliweb(self, board: str) -> list[dict[str, Any]]:
+        # 루리웹 유머게시판 베스트
+        url = "https://bbs.ruliweb.com/best/All/default"
         html = self._get_html(url)
         soup = BeautifulSoup(html, "html.parser")
         
         items = []
-        for li in soup.select(".fm_best_board li"):
-            title_tag = li.select_one(".title a")
-            if not title_tag:
-                continue
-                
-            # 제목 안에 있는 댓글수 태그 제거
-            for span in title_tag.select("span"):
-                span.decompose()
-                
-            title = title_tag.text.strip()
-            link = title_tag.get("href", "")
+        for a in soup.select(".table_body .subject a"):
+            title = a.text.strip()
+            link = a.get("href", "")
             if link.startswith("/"):
-                link = "https://www.fmkorea.com" + link
+                link = "https://bbs.ruliweb.com" + link
                 
-            items.append({"title": title, "content": "", "source": link})
+            if title:
+                items.append({"title": title, "content": "", "source": link})
             
         return items[:10]
 
     def _fetch_clien(self, board: str) -> list[dict[str, Any]]:
-        # 클리앙 공감게시물
-        url = "https://www.clien.net/service/recommend"
+        # 클리앙 모두의공원 (공감게시물 폐지 대체)
+        url = "https://www.clien.net/service/board/park"
         html = self._get_html(url)
         soup = BeautifulSoup(html, "html.parser")
         

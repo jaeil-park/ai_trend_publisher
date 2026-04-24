@@ -70,7 +70,7 @@ def process_content_via_llm(items: list[NormalizedItem], max_retries: int = 3, r
     for attempt in range(1, max_retries + 1):
         try:
             resp = _client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-flash-lite",
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction="너는 숏폼(릴스) 콘텐츠 전문 바이럴 마케터이자 데이터 정제 AI야. 오직 JSON만 응답상태로 반환해.",
