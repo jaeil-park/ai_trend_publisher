@@ -27,16 +27,20 @@ class CrawlerManager:
         # 커뮤니티 HTML 스크래퍼는 클라우드 IP(GitHub Actions)에서 차단되므로 제거
         # API 기반 소스(NewsAPI, Naver, Kakao)만 사용
 
+    # 아이템 부족 시 보조 검색어 목록
+    _FALLBACK_QUERIES = ["AI 트렌드", "테크 뉴스", "경제 뉴스", "IT 신제품", "국내 뉴스"]
+
     def collect(self, query: str = "가성비 핫이슈", max_retries: int = 3, retry_delay: float = 2.0) -> list[NormalizedItem]:
         """
-        모든 소스에서 데이터를 수집하고 정규화하여 반환한다. (실패 시 재시도 로직 포함)
+        모든 소스에서 데이터를 수집하고 정규화하여 반환한다.
+        결과가 5개 미만이면 보조 검색어로 추가 수집한다.
 
         Returns:
             [{"title": str, "content": str, "source": str}, ...]
         """
         raw_items: list[dict[str, Any]] = []
 
-        # NewsAPI 크롤링 재시도
+        # 1차: 메인 검색어로 수집
         for attempt in range(1, max_retries + 1):
             try:
                 raw_items.extend(self.news_crawler.fetch(query=query))
@@ -46,7 +50,23 @@ class CrawlerManager:
                 if attempt < max_retries:
                     time.sleep(retry_delay)
 
-        return self._normalize(raw_items)
+        normalized = self._normalize(raw_items)
+
+        # 2차: 아이템이 5개 미만이면 보조 검색어로 추가 수집
+        if len(normalized) < 5:
+            print(f"[CrawlerManager] 수집량 부족 ({len(normalized)}개), 보조 검색어로 추가 수집...")
+            for fallback_q in self._FALLBACK_QUERIES:
+                if len(normalized) >= 10:
+                    break
+                try:
+                    extra = self.news_crawler.fetch(query=fallback_q)
+                    raw_items.extend(extra)
+                    normalized = self._normalize(raw_items)
+                    print(f"[CrawlerManager] '{fallback_q}' 추가 수집 → 총 {len(normalized)}개")
+                except Exception as e:
+                    print(f"[CrawlerManager] 보조 검색어 '{fallback_q}' 실패: {e}")
+
+        return normalized
 
     def _load_history(self) -> dict[str, float]:
         """posted_history.json 에서 기존에 업로드한 기사 식별자(제목/URL)와 타임스탬프를 불러온다."""

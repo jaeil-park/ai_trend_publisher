@@ -22,7 +22,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GRAPH_BASE = "https://graph.instagram.com/v22.0"
-BRIDGE_API = "https://0x0.st"  # 클라우드 IP 비차단 무료 파일 호스팅
+TRANSFER_SH_API = "https://transfer.sh"       # 1순위: 개발자용 파일 전송, 클라우드 IP 비차단
+LITTERBOX_API  = "https://litterbox.catbox.moe/resources/internals/api.php"  # 2순위: Catbox 임시 저장소
 UPLOADED_DIR = Path("output/uploaded")
 
 POLL_TIMEOUT = 120
@@ -133,29 +134,68 @@ class InstagramUploader:
             print(f"[uploader] ⚠️ 토큰 갱신 에러: {e}")
 
     def _upload_to_bridge(self, video_path: Path) -> str | None:
-        """0x0.st에 파일을 업로드하여 Public URL을 얻어낸다 (클라우드 환경 지원)."""
-        print("[uploader]   1/4 0x0.st 브릿지 터널링 업로드 중...")
-        max_retries = 3
-        for attempt in range(1, max_retries + 1):
+        """
+        공개 URL을 확보하기 위해 여러 브릿지 서비스를 순서대로 시도한다.
+          1순위: transfer.sh  (PUT, 클라우드 비차단)
+          2순위: Litterbox    (POST, Catbox 임시 저장소 72h)
+        """
+        # --- 1순위: transfer.sh ---
+        print("[uploader]   1/4 transfer.sh 브릿지 업로드 중...")
+        url = self._try_transfer_sh(video_path)
+        if url:
+            return url
+
+        # --- 2순위: Litterbox ---
+        print("[uploader]   transfer.sh 실패, Litterbox 폴백 시도...")
+        url = self._try_litterbox(video_path)
+        if url:
+            return url
+
+        print("[uploader]   모든 브릿지 서비스 업로드 실패")
+        return None
+
+    def _try_transfer_sh(self, video_path: Path) -> str | None:
+        """transfer.sh에 PUT 방식으로 업로드 후 URL을 반환한다."""
+        for attempt in range(1, 3):
+            try:
+                with video_path.open("rb") as f:
+                    resp = requests.put(
+                        f"{TRANSFER_SH_API}/{video_path.name}",
+                        data=f,
+                        headers={"Max-Days": "1"},
+                        timeout=120,
+                    )
+                if resp.status_code == 200 and resp.text.strip().startswith("https://"):
+                    url = resp.text.strip()
+                    print(f"[uploader]   transfer.sh 확보 성공: {url}")
+                    return url
+                print(f"[uploader]   transfer.sh 실패 (시도 {attempt}/2): [{resp.status_code}] {resp.text[:200]}")
+            except Exception as e:
+                print(f"[uploader]   transfer.sh 에러 (시도 {attempt}/2): {e}")
+            if attempt < 2:
+                time.sleep(5)
+        return None
+
+    def _try_litterbox(self, video_path: Path) -> str | None:
+        """Litterbox에 파일을 업로드하여 72h 공개 URL을 반환한다."""
+        for attempt in range(1, 3):
             try:
                 with video_path.open("rb") as f:
                     resp = requests.post(
-                        BRIDGE_API,
-                        files={"file": (video_path.name, f, "video/mp4")},
+                        LITTERBOX_API,
+                        data={"reqtype": "fileupload", "time": "72h"},
+                        files={"fileToUpload": (video_path.name, f, "video/mp4")},
                         timeout=120,
                     )
-
                 if resp.status_code == 200 and resp.text.strip().startswith("https://"):
                     url = resp.text.strip()
-                    print(f"[uploader]   브릿지 확보 성공: {url}")
+                    print(f"[uploader]   Litterbox 확보 성공: {url}")
                     return url
-
-                print(f"[uploader]   브릿지 업로드 실패 (시도 {attempt}/{max_retries}): [{resp.status_code}] {resp.text[:200]}")
+                print(f"[uploader]   Litterbox 실패 (시도 {attempt}/2): [{resp.status_code}] {resp.text[:200]}")
             except Exception as e:
-                print(f"[uploader]   브릿지 API 에러 (시도 {attempt}/{max_retries}): {e}")
-
-            if attempt < max_retries:
-                time.sleep(5 * attempt)  # 5초, 10초 점진적 대기
+                print(f"[uploader]   Litterbox 에러 (시도 {attempt}/2): {e}")
+            if attempt < 2:
+                time.sleep(5)
         return None
 
     def _create_container(self, video_url: str, caption: str) -> str | None:

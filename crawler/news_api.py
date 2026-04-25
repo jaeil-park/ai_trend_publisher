@@ -30,21 +30,32 @@ class NewsApiCrawler:
 
     def fetch(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
         """
-        NewsAPI → Naver 순으로 시도하고 합산하여 반환한다.
+        NewsAPI → Naver → Kakao 순으로 시도하고 합산하여 반환한다.
+        각 소스가 실패해도 다른 소스에서 계속 수집한다.
 
         Returns:
             [{"title": str, "content": str, "source": str}, ...]
         """
         items: list[dict[str, Any]] = []
+        per_source = max(max_results, 10)  # 소스당 최대 10개 수집
 
         if self.newsapi_key:
-            items.extend(self._fetch_newsapi(query, max_results))
+            try:
+                items.extend(self._fetch_newsapi(query, per_source))
+            except Exception as e:
+                print(f"[NewsApiCrawler] NewsAPI 실패 (무시): {e}")
 
         if self.naver_client_id and self.naver_client_secret:
-            items.extend(self._fetch_naver(query, max_results))
+            try:
+                items.extend(self._fetch_naver(query, per_source))
+            except Exception as e:
+                print(f"[NewsApiCrawler] Naver API 실패 (무시): {e}")
 
         if self.kakao_api_key:
-            items.extend(self._fetch_kakao(query, max_results))
+            try:
+                items.extend(self._fetch_kakao(query, per_source))
+            except Exception as e:
+                print(f"[NewsApiCrawler] Kakao API 실패 (무시): {e}")
 
         if not items:
             raise RuntimeError(
@@ -52,7 +63,7 @@ class NewsApiCrawler:
                 "또는 KAKAO_API_KEY 를 설정하세요."
             )
 
-        return items[:max_results]
+        return items[:max_results * 3]  # 더 많이 전달하여 manager에서 필터링
 
     def _fetch_newsapi(self, query: str, max_results: int) -> list[dict[str, Any]]:
         params = {
