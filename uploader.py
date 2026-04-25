@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GRAPH_BASE = "https://graph.instagram.com/v22.0"
-CATBOX_API = "https://catbox.moe/user/api.php"
+BRIDGE_API = "https://0x0.st"  # 클라우드 IP 비차단 무료 파일 호스팅
 UPLOADED_DIR = Path("output/uploaded")
 
 POLL_TIMEOUT = 120
@@ -76,8 +76,8 @@ class InstagramUploader:
 
         print(f"\n[uploader] ▶ 브릿지 연동 업로드 시작: {video_path.name}")
         try:
-            # 1. Catbox 브릿지 업로드
-            video_url = self._upload_to_catbox(video_path)
+            # 1. 브릿지 업로드 (0x0.st)
+            video_url = self._upload_to_bridge(video_path)
             if not video_url:
                 return False
             
@@ -132,32 +132,28 @@ class InstagramUploader:
         except Exception as e:
             print(f"[uploader] ⚠️ 토큰 갱신 에러: {e}")
 
-    def _upload_to_catbox(self, video_path: Path) -> str | None:
-        """Catbox에 파일을 업로드하여 Public URL을 얻어낸다."""
-        print("[uploader]   1/4 Catbox 브릿지 터널링 업로드 중...")
+    def _upload_to_bridge(self, video_path: Path) -> str | None:
+        """0x0.st에 파일을 업로드하여 Public URL을 얻어낸다 (클라우드 환경 지원)."""
+        print("[uploader]   1/4 0x0.st 브릿지 터널링 업로드 중...")
         max_retries = 3
         for attempt in range(1, max_retries + 1):
             try:
                 with video_path.open("rb") as f:
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
-                    }
                     resp = requests.post(
-                        CATBOX_API,
-                        data={"reqtype": "fileupload"},
-                        files={"fileToUpload": f},
-                        headers=headers,
-                        timeout=60,
+                        BRIDGE_API,
+                        files={"file": (video_path.name, f, "video/mp4")},
+                        timeout=120,
                     )
-                
-                if resp.status_code == 200 and resp.text.startswith("https://"):
-                    print(f"[uploader]   브릿지 확보 성공: {resp.text}")
-                    return resp.text.strip()
-                    
-                print(f"[uploader]   브릿지 업로드 실패 (시도 {attempt}/{max_retries}): [{resp.status_code}] {resp.text}")
+
+                if resp.status_code == 200 and resp.text.strip().startswith("https://"):
+                    url = resp.text.strip()
+                    print(f"[uploader]   브릿지 확보 성공: {url}")
+                    return url
+
+                print(f"[uploader]   브릿지 업로드 실패 (시도 {attempt}/{max_retries}): [{resp.status_code}] {resp.text[:200]}")
             except Exception as e:
-                print(f"[uploader]   Catbox API 에러 (시도 {attempt}/{max_retries}): {e}")
-            
+                print(f"[uploader]   브릿지 API 에러 (시도 {attempt}/{max_retries}): {e}")
+
             if attempt < max_retries:
                 time.sleep(5 * attempt)  # 5초, 10초 점진적 대기
         return None

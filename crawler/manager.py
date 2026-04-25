@@ -13,7 +13,6 @@ from pathlib import Path
 from typing import Any
 
 from .news_api import NewsApiCrawler
-from .community_scraper import CommunityScraper
 
 
 # 정규화된 아이템 타입
@@ -25,9 +24,8 @@ class CrawlerManager:
 
     def __init__(self, news_api_key: str = "") -> None:
         self.news_crawler = NewsApiCrawler(api_key=news_api_key)
-        self.community_crawlers = [
-            CommunityScraper(site=s) for s in CommunityScraper.SUPPORTED_SITES
-        ]
+        # 커뮤니티 HTML 스크래퍼는 클라우드 IP(GitHub Actions)에서 차단되므로 제거
+        # API 기반 소스(NewsAPI, Naver, Kakao)만 사용
 
     def collect(self, query: str = "가성비 핫이슈", max_retries: int = 3, retry_delay: float = 2.0) -> list[NormalizedItem]:
         """
@@ -47,17 +45,6 @@ class CrawlerManager:
                 print(f"[CrawlerManager] news_api error (attempt {attempt}/{max_retries}): {e}")
                 if attempt < max_retries:
                     time.sleep(retry_delay)
-
-        # 커뮤니티 스크래퍼 재시도
-        for scraper in self.community_crawlers:
-            for attempt in range(1, max_retries + 1):
-                try:
-                    raw_items.extend(scraper.fetch(board="hot"))
-                    break
-                except Exception as e:
-                    print(f"[CrawlerManager] {scraper.site} error (attempt {attempt}/{max_retries}): {e}")
-                    if attempt < max_retries:
-                        time.sleep(retry_delay)
 
         return self._normalize(raw_items)
 
