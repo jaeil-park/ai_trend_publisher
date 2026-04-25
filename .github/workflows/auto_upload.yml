@@ -6,6 +6,11 @@ on:
     - cron: "0 23,3,9 * * *"
   workflow_dispatch:
 
+# 동시 실행 방지 — posted_history.json Gist 동기화 충돌 예방
+concurrency:
+  group: ai-trend-publisher
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -42,3 +47,14 @@ jobs:
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           GIST_ID:                ${{ secrets.GIST_ID }}
           GH_PAT:                 ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY:      ${{ github.repository }}
+
+      - name: 📋 실행 결과 요약
+        if: always()
+        run: |
+          echo "## 🤖 AI Trend Publisher 실행 결과" >> $GITHUB_STEP_SUMMARY
+          echo "| 항목 | 값 |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| 상태 | ${{ job.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 실행 시각 (UTC) | $(date '+%Y-%m-%d %H:%M:%S') |" >> $GITHUB_STEP_SUMMARY
+          echo "| 트리거 | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY

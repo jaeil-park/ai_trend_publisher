@@ -1,9 +1,9 @@
 """
-인스타그램 릴스 자동 업로더 — Meta Instagram API + Catbox Bridge 기반
-환경변수: INSTAGRAM_ACCESS_TOKEN
+인스타그램 릴스 자동 업로더 — Meta Instagram API 기반
+환경변수: INSTAGRAM_ACCESS_TOKEN, GH_PAT, GITHUB_REPOSITORY
 
 업로드 플로우:
-  1. 로컬 mp4 -> Catbox에 임시 업로드하여 공개 URL 획득 (video_url)
+  1. 로컬 mp4 → 공개 URL 획득 (브릿지 순서: GitHub Releases → transfer.sh → Litterbox)
   2. Instagram API 컨테이너 생성 (POST /v22.0/me/media)
   3. 컨테이너 처리 대기 (GET /v22.0/{container_id} 폴링)
   4. 릴스 게시 (POST /v22.0/me/media_publish)
@@ -21,9 +21,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GRAPH_BASE = "https://graph.instagram.com/v22.0"
-TRANSFER_SH_API = "https://transfer.sh"       # 1순위: 개발자용 파일 전송, 클라우드 IP 비차단
-LITTERBOX_API  = "https://litterbox.catbox.moe/resources/internals/api.php"  # 2순위: Catbox 임시 저장소
+GRAPH_BASE      = "https://graph.instagram.com/v22.0"
+GH_API_BASE     = "https://api.github.com"             # 1순위: GitHub Releases (가장 안정적)
+GH_UPLOAD_BASE  = "https://uploads.github.com"
+GH_RELEASE_TAG  = "media-bridge"                        # 릴리즈 태그 (재사용)
+TRANSFER_SH_API = "https://transfer.sh"                # 2순위: 개발자용 파일 전송
+LITTERBOX_API   = "https://litterbox.catbox.moe/resources/internals/api.php"  # 3순위: Catbox 임시 저장소
 UPLOADED_DIR = Path("output/uploaded")
 
 POLL_TIMEOUT = 120
@@ -136,22 +139,101 @@ class InstagramUploader:
     def _upload_to_bridge(self, video_path: Path) -> str | None:
         """
         공개 URL을 확보하기 위해 여러 브릿지 서비스를 순서대로 시도한다.
-          1순위: transfer.sh  (PUT, 클라우드 비차단)
-          2순위: Litterbox    (POST, Catbox 임시 저장소 72h)
+          1순위: GitHub Releases  (GH_PAT 인증, 가장 안정적)
+          2순위: transfer.sh      (PUT, 클라우드 비차단)
+          3순위: Litterbox        (POST, Catbox 임시 저장소 72h)
         """
-        # --- 1순위: transfer.sh ---
-        print("[uploader]   1/4 transfer.sh 브릿지 업로드 중...")
+        print("[uploader]   1/4 GitHub Releases 브릿지 업로드 중...")
+        url = self._try_github_release(video_path)
+        if url:
+            return url
+
+        print("[uploader]   GitHub Releases 실패, transfer.sh 폴백 시도...")
         url = self._try_transfer_sh(video_path)
         if url:
             return url
 
-        # --- 2순위: Litterbox ---
         print("[uploader]   transfer.sh 실패, Litterbox 폴백 시도...")
         url = self._try_litterbox(video_path)
         if url:
             return url
 
         print("[uploader]   모든 브릿지 서비스 업로드 실패")
+        return None
+
+    def _try_github_release(self, video_path: Path) -> str | None:
+        """
+        GitHub Releases 에셋으로 업로드 후 browser_download_url을 반환한다.
+        공개 레포에서는 인증 없이 다운로드 가능 → Instagram API와 호환.
+        media-bridge 태그 릴리즈를 재사용하여 스토리지 낭비를 방지한다.
+        """
+        gh_pat = os.getenv("GH_PAT", "")
+        repo   = os.getenv("GITHUB_REPOSITORY", "jaeil-park/ai_trend_publisher")
+        if not gh_pat:
+            print("[uploader]   GH_PAT 미설정 → GitHub Releases 건너뜀")
+            return None
+
+        headers = {
+            "Authorization": f"token {gh_pat}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+
+        try:
+            # 1. 기존 media-bridge 릴리즈 조회 또는 신규 생성
+            resp = requests.get(
+                f"{GH_API_BASE}/repos/{repo}/releases/tags/{GH_RELEASE_TAG}",
+                headers=headers, timeout=10,
+            )
+            if resp.status_code == 200:
+                release_id = resp.json()["id"]
+            else:
+                create_resp = requests.post(
+                    f"{GH_API_BASE}/repos/{repo}/releases",
+                    headers=headers,
+                    json={
+                        "tag_name": GH_RELEASE_TAG,
+                        "name": "Media Bridge",
+                        "body": "Instagram Reels 파이프라인용 임시 미디어 호스팅 릴리즈",
+                        "draft": False,
+                        "prerelease": True,
+                    },
+                    timeout=10,
+                )
+                if create_resp.status_code not in (200, 201):
+                    print(f"[uploader]   릴리즈 생성 실패: {create_resp.text[:200]}")
+                    return None
+                release_id = create_resp.json()["id"]
+
+            # 2. 동일 이름의 기존 에셋 삭제 (재업로드 충돌 방지)
+            assets_resp = requests.get(
+                f"{GH_API_BASE}/repos/{repo}/releases/{release_id}/assets",
+                headers=headers, timeout=10,
+            )
+            if assets_resp.status_code == 200:
+                for asset in assets_resp.json():
+                    if asset["name"] == video_path.name:
+                        requests.delete(
+                            f"{GH_API_BASE}/repos/{repo}/releases/assets/{asset['id']}",
+                            headers=headers, timeout=10,
+                        )
+
+            # 3. 에셋 업로드
+            with video_path.open("rb") as f:
+                upload_resp = requests.post(
+                    f"{GH_UPLOAD_BASE}/repos/{repo}/releases/{release_id}/assets"
+                    f"?name={video_path.name}",
+                    headers={**headers, "Content-Type": "video/mp4"},
+                    data=f,
+                    timeout=120,
+                )
+            if upload_resp.status_code in (200, 201):
+                url = upload_resp.json().get("browser_download_url", "")
+                if url:
+                    print(f"[uploader]   GitHub Releases 확보 성공: {url}")
+                    return url
+            print(f"[uploader]   에셋 업로드 실패: [{upload_resp.status_code}] {upload_resp.text[:200]}")
+        except Exception as e:
+            print(f"[uploader]   GitHub Releases 에러: {e}")
         return None
 
     def _try_transfer_sh(self, video_path: Path) -> str | None:

@@ -12,9 +12,9 @@ import time
 from pathlib import Path
 
 
-# Viewport 규격 (720x1280, 9:16 비율)
-VIEWPORT_WIDTH = 720
-VIEWPORT_HEIGHT = 1280
+# Viewport 규격 (1080x1920, 9:16 비율 — Instagram Reels 권장 해상도)
+VIEWPORT_WIDTH  = 1080
+VIEWPORT_HEIGHT = 1920
 RECORD_DURATION_SEC = 10
 
 

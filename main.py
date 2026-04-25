@@ -36,9 +36,10 @@ _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 # LLM 템플릿 선택 및 데이터 추출
 # ---------------------------------------------------------------------------
 
-def process_content_via_llm(items: list[NormalizedItem], max_retries: int = 3, retry_delay: float = 2.0) -> dict[str, Any]:
+def process_content_via_llm(items: list[NormalizedItem], query: str = "", max_retries: int = 3, retry_delay: float = 2.0) -> dict[str, Any]:
     """
-    OpenAI API를 호출하여 여러 개의 뉴스/게시물을 하나의 시퀀스(news_sequence) 템플릿용으로 요약한다.
+    Gemini API를 호출하여 여러 개의 뉴스/게시물을 하나의 시퀀스(news_sequence) 템플릿용으로 요약한다.
+    검색어(query)를 함께 전달하여 해시태그와 캡션의 주제 적합성을 높인다.
     결과 JSON 스키마 강제.
     """
     # 묶음 데이터 컨텍스트 생성
@@ -46,16 +47,18 @@ def process_content_via_llm(items: list[NormalizedItem], max_retries: int = 3, r
     for idx, item in enumerate(items, 1):
         context_text += f"\n[뉴스{idx}]\n제목: {item['title']}\n출처: {item['source']}\n내용: {item['content'][:500]}\n"
 
+    query_hint = f"오늘의 주제 키워드: '{query}'\n" if query else ""
+
     prompt = f"""다음 여러 개의 뉴스/커뮤니티 게시물들을 최대 5개 묶음으로 엮어 1개의 '뉴스 시퀀스(순차 전환)' 릴스 영상으로 만들거야.
 각 뉴스 항목(scene)은 화면에 단 4초만 노출될 것이므로 가독성이 생명이야.
-아래 데이터를 분석하여 지정된 JSON 스키마에 맞춰 변환해줘.
+{query_hint}아래 데이터를 분석하여 지정된 JSON 스키마에 맞춰 변환해줘.
 
 {context_text}
 
 반드시 다음 JSON 구조를 반환해야 해 (마크다운 백틱 없이 순수 JSON만 반환):
 {{
   "template_type": "news", 
-  "instagram_caption": "인스타그램 릴스 본문에 들어갈 찰진 전체 요약 설명 (2~3줄) + 관련 한국어 해시태그 5개",
+  "instagram_caption": "인스타그램 릴스 본문에 들어갈 찰진 전체 요약 설명 (2~3줄) + 주제 키워드 '{query}'와 직접 관련된 한국어 해시태그 7개",
   "scenes": [
     {{
       "hook_title": "해당 뉴스의 첫 3초 시선을 끌 강력한 헤드라인 (10자 이내)",
@@ -180,7 +183,7 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
 
     for chunk_idx, chunk in enumerate(item_chunks):
         try:
-            llm_data = process_content_via_llm(chunk)
+            llm_data = process_content_via_llm(chunk, query=query)
             
             # Jinja2 기반으로 HTML 생성
             tmp_html = inject_template_variables(llm_data)
