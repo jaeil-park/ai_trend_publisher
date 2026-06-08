@@ -1,5 +1,5 @@
 # LLM
-google-genai>=0.1.0
+google-genai>=0.1.2
 
 # 렌더링
 playwright>=1.44.0
