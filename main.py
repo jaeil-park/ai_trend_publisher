@@ -48,9 +48,12 @@ def process_content_via_llm(items: list[NormalizedItem], query: str = "", max_re
         context_text += f"\n[뉴스{idx}]\n제목: {item['title']}\n출처: {item['source']}\n내용: {item['content'][:500]}\n"
 
     query_hint = f"오늘의 주제 키워드: '{query}'\n" if query else ""
+    today_str = datetime.now().strftime("%Y년 %m월 %d일")
 
-    prompt = f"""다음 여러 개의 뉴스/커뮤니티 게시물들을 최대 5개 묶음으로 엮어 1개의 '뉴스 시퀀스(순차 전환)' 릴스 영상으로 만들거야.
+    prompt = f"""[오늘 날짜: {today_str}] 지금은 2026년이야. 아래 뉴스는 모두 {today_str} 기준 최신 이슈야.
+다음 여러 개의 뉴스/커뮤니티 게시물들을 최대 5개 묶음으로 엮어 1개의 '뉴스 시퀀스(순차 전환)' 릴스 영상으로 만들거야.
 각 뉴스 항목(scene)은 화면에 단 4초만 노출될 것이므로 가독성이 생명이야.
+⚠️ 절대 2024년이나 과거 연도를 언급하지 마. 모든 내용은 2026년 현재 기준으로 작성해야 해.
 {query_hint}아래 데이터를 분석하여 지정된 JSON 스키마에 맞춰 변환해줘.
 
 {context_text}
