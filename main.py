@@ -220,16 +220,51 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
     return results
 
 
+def notify_discord(message: str) -> None:
+    """Discord 웹훅으로 발행 결과를 알린다."""
+    webhook = os.getenv("DISCORD_WEBHOOK_URL", "")
+    if not webhook:
+        return
+    try:
+        requests.post(webhook, json={"content": message}, timeout=10)
+    except Exception as e:
+        print(f"[main] Discord 알림 실패: {e}")
+
+
 if __name__ == "__main__":
     pairs = run_pipeline()
     print(f"\n[main] 총 {len(pairs)}개 영상 생성 완료")
 
+    ig_count = 0
+    th_count = 0
+
     if pairs and os.getenv("INSTAGRAM_ACCESS_TOKEN"):
-        from uploader import InstagramUploader
-        uploader = InstagramUploader()
-        if uploader.login():
+        from uploader import InstagramUploader, ThreadsUploader
+
+        ig_uploader = InstagramUploader()
+        th_uploader = ThreadsUploader()
+
+        if ig_uploader.login():
             for video_path, caption in pairs:
-                uploader.upload_reel(video_path, caption)
-        print("[main] 인스타그램 업로드 완료")
+                success = ig_uploader.upload_reel(video_path, caption)
+                if success:
+                    ig_count += 1
+
+                    # Instagram 브릿지 URL을 Threads에 재사용 (중복 업로드 없음)
+                    bridge_url = ig_uploader._last_bridge_url
+                    if bridge_url and th_uploader.is_configured():
+                        th_success = th_uploader.upload_reel(bridge_url, caption)
+                        if th_success:
+                            th_count += 1
+
+        print(f"[main] Instagram {ig_count}개 / Threads {th_count}개 업로드 완료")
+
+        platforms = []
+        if ig_count:
+            platforms.append(f"Instagram {ig_count}개")
+        if th_count:
+            platforms.append(f"Threads {th_count}개")
+        if platforms:
+            notify_discord(f"✅ AI 트렌드 릴스 발행 완료 | {' + '.join(platforms)}")
     else:
         print("[main] INSTAGRAM_ACCESS_TOKEN 미설정 → 업로드 단계 건너뜀")

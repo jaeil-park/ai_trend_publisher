@@ -2,8 +2,13 @@ name: AI Trend Auto Upload
 
 on:
   schedule:
-    # 매일 KST 08:00(=UTC 23:00), 12:00(=UTC 03:00), 18:00(=UTC 09:00)
-    - cron: "0 23,3,9 * * *"
+    # 카드뉴스(ai-card-publisher)와 30분~1시간 간격 유지하여 알고리즘 분산
+    # KST 07:30 (UTC 22:30) — 출근 직전 피크
+    # KST 13:00 (UTC 04:00) — 점심 피크
+    # KST 20:30 (UTC 11:30) — 야간 피크
+    - cron: "30 22 * * *"
+    - cron: "0 4 * * *"
+    - cron: "30 11 * * *"
   workflow_dispatch:
 
 # 동시 실행 방지 — posted_history.json Gist 동기화 충돌 예방
@@ -45,6 +50,9 @@ jobs:
           NAVER_CLIENT_ID:        ${{ secrets.NAVER_CLIENT_ID }}
           NAVER_CLIENT_SECRET:    ${{ secrets.NAVER_CLIENT_SECRET }}
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          THREADS_USER_ID:        ${{ secrets.THREADS_USER_ID }}
+          THREADS_ACCESS_TOKEN:   ${{ secrets.THREADS_ACCESS_TOKEN }}
+          DISCORD_WEBHOOK_URL:    ${{ secrets.DISCORD_WEBHOOK_URL }}
           GIST_ID:                ${{ secrets.GIST_ID }}
           GH_PAT:                 ${{ secrets.GH_PAT }}
           GITHUB_REPOSITORY:      ${{ github.repository }}

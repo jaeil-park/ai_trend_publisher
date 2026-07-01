@@ -1,12 +1,18 @@
 """
-인스타그램 릴스 자동 업로더 — Meta Instagram API 기반
-환경변수: INSTAGRAM_ACCESS_TOKEN, GH_PAT, GITHUB_REPOSITORY
+인스타그램 + Threads 릴스 자동 업로더 — Meta Graph API 기반
+환경변수: INSTAGRAM_ACCESS_TOKEN, THREADS_USER_ID, THREADS_ACCESS_TOKEN,
+          GH_PAT, GITHUB_REPOSITORY
 
-업로드 플로우:
+Instagram 업로드 플로우:
   1. 로컬 mp4 → 공개 URL 획득 (브릿지 순서: GitHub Releases → transfer.sh → Litterbox)
   2. Instagram API 컨테이너 생성 (POST /v22.0/me/media)
   3. 컨테이너 처리 대기 (GET /v22.0/{container_id} 폴링)
   4. 릴스 게시 (POST /v22.0/me/media_publish)
+
+Threads 업로드 플로우 (Instagram 브릿지 URL 재사용):
+  1. Threads 컨테이너 생성 (POST /v1.0/{user_id}/threads, media_type=VIDEO)
+  2. 컨테이너 처리 대기 (30초 고정)
+  3. Threads 게시 (POST /v1.0/{user_id}/threads_publish)
 """
 from __future__ import annotations
 
@@ -21,7 +27,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GRAPH_BASE      = "https://graph.instagram.com/v22.0"
+GRAPH_BASE          = "https://graph.instagram.com/v22.0"
+THREADS_GRAPH_BASE  = "https://graph.instagram.com/v1.0"
+THREADS_POLL_TIMEOUT = 60
 GH_API_BASE     = "https://api.github.com"             # 1순위: GitHub Releases (가장 안정적)
 GH_UPLOAD_BASE  = "https://uploads.github.com"
 GH_RELEASE_TAG  = "media-bridge"                        # 릴리즈 태그 (재사용)
@@ -72,18 +80,22 @@ class InstagramUploader:
 
     def upload_reel(self, video_path: Path, caption: str) -> bool:
         """
-        로컬 mp4 파일을 Catbox 브릿지를 통해 서버에 올린 뒤 인스타그램에 게시한다.
+        로컬 mp4 파일을 브릿지를 통해 서버에 올린 뒤 인스타그램에 게시한다.
+        브릿지 URL은 self._last_bridge_url에 저장되어 Threads 재사용 가능.
         """
+        self._last_bridge_url: str | None = None
+
         if not video_path.exists():
             print(f"[uploader] 파일 없음: {video_path}")
             return False
 
         print(f"\n[uploader] ▶ 브릿지 연동 업로드 시작: {video_path.name}")
         try:
-            # 1. 브릿지 업로드 (0x0.st)
+            # 1. 브릿지 업로드
             video_url = self._upload_to_bridge(video_path)
             if not video_url:
                 return False
+            self._last_bridge_url = video_url  # Threads 업로드에서 재사용
             
             # 2. 미디어 컨테이너 생성
             container_id = self._create_container(video_url, caption)
@@ -355,3 +367,94 @@ class InstagramUploader:
         dest = UPLOADED_DIR / video_path.name
         shutil.move(str(video_path), str(dest))
         print(f"[uploader] 아카이브: {video_path.name} → output/uploaded/")
+
+
+class ThreadsUploader:
+    """
+    Threads Graph API를 통해 릴스 영상을 발행한다.
+    Instagram 업로더가 확보한 브릿지 URL을 재사용하므로 별도 파일 업로드 없음.
+
+    환경변수: THREADS_USER_ID, THREADS_ACCESS_TOKEN
+    """
+
+    def __init__(self) -> None:
+        self.user_id = os.getenv("THREADS_USER_ID", "")
+        self.token   = os.getenv("THREADS_ACCESS_TOKEN", "")
+
+    def is_configured(self) -> bool:
+        return bool(self.user_id and self.token)
+
+    def upload_reel(self, video_url: str, caption: str) -> bool:
+        """
+        공개 video_url을 Threads에 릴스로 게시한다.
+        Returns True on success.
+        """
+        if not self.is_configured():
+            print("[threads] THREADS_USER_ID / THREADS_ACCESS_TOKEN 미설정 → 건너뜀")
+            return False
+
+        print(f"\n[threads] ▶ Threads 릴스 발행 시작...")
+
+        # 1. 컨테이너 생성
+        container_id = self._create_container(video_url, caption)
+        if not container_id:
+            return False
+
+        # 2. 처리 대기 (Threads는 상태 폴링 대신 고정 대기)
+        print(f"[threads]   컨테이너 처리 대기 ({THREADS_POLL_TIMEOUT}초)...")
+        time.sleep(THREADS_POLL_TIMEOUT)
+
+        # 3. 게시
+        media_id = self._publish(container_id)
+        if not media_id:
+            return False
+
+        print(f"[threads] ✅ Threads 릴스 게시 완료! media_id={media_id}")
+        return True
+
+    def _create_container(self, video_url: str, caption: str) -> str | None:
+        """Threads 미디어 컨테이너를 생성하고 container_id를 반환한다."""
+        print("[threads]   1/2 컨테이너 생성 중...")
+        try:
+            resp = requests.post(
+                f"{THREADS_GRAPH_BASE}/{self.user_id}/threads",
+                params={
+                    "media_type": "VIDEO",
+                    "video_url": video_url,
+                    "text": caption[:480],   # Threads 500자 제한
+                    "topic_tag": "TECHNOLOGY",
+                    "access_token": self.token,
+                },
+                timeout=30,
+            )
+            data = resp.json()
+            if resp.status_code != 200 or "id" not in data:
+                print(f"[threads]   컨테이너 생성 실패: {data}")
+                return None
+            container_id = data["id"]
+            print(f"[threads]   container_id={container_id}")
+            return container_id
+        except Exception as e:
+            print(f"[threads]   컨테이너 생성 에러: {e}")
+            return None
+
+    def _publish(self, container_id: str) -> str | None:
+        """준비된 컨테이너를 Threads 피드에 게시한다."""
+        print("[threads]   2/2 최종 게시 중...")
+        try:
+            resp = requests.post(
+                f"{THREADS_GRAPH_BASE}/{self.user_id}/threads_publish",
+                params={
+                    "creation_id": container_id,
+                    "access_token": self.token,
+                },
+                timeout=30,
+            )
+            data = resp.json()
+            if resp.status_code != 200 or "id" not in data:
+                print(f"[threads]   게시 실패: {data}")
+                return None
+            return data["id"]
+        except Exception as e:
+            print(f"[threads]   게시 에러: {e}")
+            return None
