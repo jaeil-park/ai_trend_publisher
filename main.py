@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import requests
 import jinja2
 from dotenv import load_dotenv
 from google import genai
@@ -61,7 +62,7 @@ def process_content_via_llm(items: list[NormalizedItem], query: str = "", max_re
 반드시 다음 JSON 구조를 반환해야 해 (마크다운 백틱 없이 순수 JSON만 반환):
 {{
   "template_type": "news", 
-  "instagram_caption": "인스타그램 릴스 본문에 들어갈 찰진 전체 요약 설명 (2~3줄) + 주제 키워드 '{query}'와 직접 관련된 한국어 해시태그 7개",
+  "instagram_caption": "인스타그램 릴스 본문에 들어갈 찰진 전체 요약 설명 (2~3줄) + 주제 키워드 '{query}'와 직접 관련된 한국어 해시태그 7개. 마지막에 반드시 두 줄 추가: '👉 매일 AI 트렌드를 받아보고 싶다면 팔로우 @jaeil.park' 그리고 '📌 더 깊은 인사이트는 infralog.kr (프로필 바이오 링크)'",
   "scenes": [
     {{
       "hook_title": "해당 뉴스의 첫 3초 시선을 끌 강력한 헤드라인 (10자 이내)",
