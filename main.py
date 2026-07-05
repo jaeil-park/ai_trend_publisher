@@ -188,26 +188,32 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
     for chunk_idx, chunk in enumerate(item_chunks):
         try:
             llm_data = process_content_via_llm(chunk, query=query)
-            
+
+            # 빈 콘텐츠 가드 — scenes 없거나 캡션 실패 시 해당 chunk 건너뜀
+            scenes = llm_data.get("scenes", [])
+            caption = llm_data.get("instagram_caption", "")
+            if not scenes:
+                print(f"[main] ⚠️ Chunk {chunk_idx}: scenes 비어있음 → 건너뜀 (Gemini 실패 또는 데이터 부족)")
+                continue
+            if not caption or caption in ("요약 실패", "Trend Now News Sequence"):
+                print(f"[main] ⚠️ Chunk {chunk_idx}: 캡션 생성 실패 → 건너뜀")
+                continue
+
             # Jinja2 기반으로 HTML 생성
             tmp_html = inject_template_variables(llm_data)
 
             output_path = output_dir / f"sequence_reel_{chunk_idx:03d}.mp4"
-            
+
             # 동적 시간 설정: 장면당 4초 + 여유 1초
-            scenes_count = len(llm_data.get("scenes", []))
-            calc_duration = (scenes_count * 4) + 1
-            
-            if calc_duration < 5:
-                calc_duration = 5
+            scenes_count = len(scenes)
+            calc_duration = max(5, (scenes_count * 4) + 1)
 
             video = render_to_video(
-                html_path=tmp_html, 
-                output_path=output_path, 
+                html_path=tmp_html,
+                output_path=output_path,
                 duration=calc_duration
             )
 
-            caption = llm_data.get("instagram_caption", "Trend Now News Sequence")
             results.append((video, caption))
             print(f"[main] 완료: {video} (총 {scenes_count}개 장면, {calc_duration}초)")
 
@@ -239,6 +245,10 @@ if __name__ == "__main__":
     pairs = run_pipeline()
     print(f"\n[main] 총 {len(pairs)}개 영상 생성 완료")
 
+    if not pairs:
+        notify_discord("⚠️ AI 트렌드 릴스 생성 실패 — 뉴스 수집 또는 Gemini 처리 오류로 발행 건너뜀")
+        raise SystemExit(1)
+
     ig_count = 0
     th_count = 0
 
@@ -250,6 +260,9 @@ if __name__ == "__main__":
 
         if ig_uploader.login():
             for video_path, caption in pairs:
+                if not caption or not video_path.exists():
+                    print(f"[main] 건너뜀: 캡션 없음 또는 파일 없음 ({video_path})")
+                    continue
                 success = ig_uploader.upload_reel(video_path, caption)
                 if success:
                     ig_count += 1
@@ -268,7 +281,10 @@ if __name__ == "__main__":
             platforms.append(f"Instagram {ig_count}개")
         if th_count:
             platforms.append(f"Threads {th_count}개")
+
         if platforms:
-            notify_discord(f"✅ AI 트렌드 릴스 발행 완료 | {' + '.join(platforms)}")
+            notify_discord(f"✅ AI 트렌드 릴스 발행 완료 | {' + '.join(platforms)} | 키워드: {pairs[0][1][:30] if pairs else '-'}...")
+        else:
+            notify_discord(f"⚠️ AI 트렌드 릴스 발행 실패 — 영상 {len(pairs)}개 생성됐으나 Instagram 업로드 모두 실패")
     else:
         print("[main] INSTAGRAM_ACCESS_TOKEN 미설정 → 업로드 단계 건너뜀")
