@@ -89,6 +89,12 @@ class InstagramUploader:
             print(f"[uploader] 파일 없음: {video_path}")
             return False
 
+        from rate_limiter import check_rate_limit
+        ok, reason = check_rate_limit("instagram")
+        if not ok:
+            print(f"[uploader] ⏭️  업로드 스킵: {reason}")
+            return False
+
         print(f"\n[uploader] ▶ 브릿지 연동 업로드 시작: {video_path.name}")
         try:
             # 1. 브릿지 업로드
@@ -113,6 +119,9 @@ class InstagramUploader:
 
             print(f"[uploader] ✅ 릴스 게시 완료! media_id={media_id}")
             self._archive(video_path)
+
+            from rate_limiter import record_upload
+            record_upload("instagram")
 
             delay = random.uniform(5, 10)
             time.sleep(delay)
@@ -393,6 +402,12 @@ class ThreadsUploader:
             print("[threads] THREADS_USER_ID / THREADS_ACCESS_TOKEN 미설정 → 건너뜀")
             return False
 
+        from rate_limiter import check_rate_limit
+        ok, reason = check_rate_limit("threads")
+        if not ok:
+            print(f"[threads] ⏭️  게시 스킵: {reason}")
+            return False
+
         print(f"\n[threads] ▶ Threads 릴스 발행 시작...")
 
         # 1. 컨테이너 생성
@@ -410,6 +425,8 @@ class ThreadsUploader:
             return False
 
         print(f"[threads] ✅ Threads 릴스 게시 완료! media_id={media_id}")
+        from rate_limiter import record_upload
+        record_upload("threads")
         return True
 
     def _create_container(self, video_url: str, caption: str) -> str | None:

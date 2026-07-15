@@ -179,8 +179,10 @@ def run_pipeline(query: str | None = None) -> list[tuple[Path, str]]:
     output_dir.mkdir(exist_ok=True)
 
     results: list[tuple[Path, str]] = []
-    # 10개 뉴스를 5개씩 나눠 2개의 릴스 생성
-    items = items[:10]
+    # 2026-07 개편: 실행당 릴스 1개로 축소 (기존 5개씩 2개 생성).
+    # 크론 2회/일 × 릴스 1개/실행 = 정확히 2개/일을 코드 레벨에서 강제
+    # (rate_limiter.py의 플랫폼별 일일한도 2건과 일치 — Meta 스팸 정책 대응)
+    items = items[:5]
     chunk_size = 5
     item_chunks = [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
     print(f"[main] {len(items)}개 아이템 → {len(item_chunks)}개 릴스 생성 예정")

@@ -2,12 +2,12 @@ name: AI Trend Auto Upload
 
 on:
   schedule:
-    # 카드뉴스(ai-card-publisher)와 30분~1시간 간격 유지하여 알고리즘 분산
+    # 2026-07 2차 개편: 3회/일 → 2회/일로 재조정. Threads 발행이 추가되며
+    # Meta 스팸 정책("고빈도 게시") 위험이 재도입됐다고 판단 — 자매 프로젝트
+    # ai-card-publisher와 동시에 겹치지 않도록 간격은 유지.
     # KST 07:30 (UTC 22:30) — 출근 직전 피크
-    # KST 13:00 (UTC 04:00) — 점심 피크
     # KST 20:30 (UTC 11:30) — 야간 피크
     - cron: "30 22 * * *"
-    - cron: "0 4 * * *"
     - cron: "30 11 * * *"
   workflow_dispatch:
 
