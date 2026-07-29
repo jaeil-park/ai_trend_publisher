@@ -393,7 +393,7 @@ class ThreadsUploader:
     def is_configured(self) -> bool:
         return bool(self.user_id and self.token)
 
-    def upload_reel(self, video_url: str, caption: str) -> bool:
+    def upload_reel(self, video_url: str, caption: str, topic_tag: str = "TECHNOLOGY") -> bool:
         """
         공개 video_url을 Threads에 릴스로 게시한다.
         Returns True on success.
@@ -411,7 +411,7 @@ class ThreadsUploader:
         print(f"\n[threads] ▶ Threads 릴스 발행 시작...")
 
         # 1. 컨테이너 생성
-        container_id = self._create_container(video_url, caption)
+        container_id = self._create_container(video_url, caption, topic_tag)
         if not container_id:
             return False
 
@@ -429,7 +429,7 @@ class ThreadsUploader:
         record_upload("threads")
         return True
 
-    def _create_container(self, video_url: str, caption: str) -> str | None:
+    def _create_container(self, video_url: str, caption: str, topic_tag: str = "TECHNOLOGY") -> str | None:
         """Threads 미디어 컨테이너를 생성하고 container_id를 반환한다."""
         print("[threads]   1/2 컨테이너 생성 중...")
         try:
@@ -439,7 +439,7 @@ class ThreadsUploader:
                     "media_type": "VIDEO",
                     "video_url": video_url,
                     "text": caption[:480],   # Threads 500자 제한
-                    "topic_tag": "TECHNOLOGY",
+                    "topic_tag": topic_tag,
                     "access_token": self.token,
                 },
                 timeout=30,

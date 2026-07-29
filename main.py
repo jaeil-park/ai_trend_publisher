@@ -116,6 +116,36 @@ def process_content_via_llm(items: list[NormalizedItem], query: str = "", max_re
     return data
 
 
+def generate_topic_tag(caption: str) -> str:
+    """
+    Threads topic_tag는 고정 카테고리 enum이 아니라 자유 텍스트(1~50자,
+    마침표·앰퍼샌드 금지)다. 지금까지 "TECHNOLOGY" 고정값을 썼는데, 캡션
+    내용에 맞는 짧고 후킹성 있는 태그를 매번 새로 생성한다.
+    """
+    fallback = "AI트렌드"
+    try:
+        resp = _client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=f"다음 SNS 캡션의 주제를 나타내는 아주 짧고 후킹성 있는 토픽 태그를 1개 만들어줘.\n\n캡션:\n{caption[:500]}",
+            config=types.GenerateContentConfig(
+                system_instruction=(
+                    "너는 한국 Threads(스레드) 콘텐츠 큐레이터야. "
+                    "2~8자 이내의 한국어 명사/짧은 구로(예: AI트렌드, 코인시황, 개발툴), "
+                    "마침표나 앰퍼샌드 없이 공백 없이 붙여쓴 태그를 만들어. "
+                    "반드시 JSON만 응답: {\"tag\": \"AI트렌드\"}"
+                ),
+                temperature=0.7,
+                response_mime_type="application/json",
+            ),
+        )
+        tag = str(json.loads((resp.text or "{}").strip()).get("tag", "")).strip()
+        tag = tag.replace(".", "").replace("&", "").replace(" ", "")[:50]
+        return tag or fallback
+    except Exception as e:
+        print(f"[main] topic_tag 생성 실패: {e}")
+        return fallback
+
+
 # ---------------------------------------------------------------------------
 # 템플릿별 변수 주입
 # ---------------------------------------------------------------------------
@@ -272,7 +302,8 @@ if __name__ == "__main__":
                     # Instagram 브릿지 URL을 Threads에 재사용 (중복 업로드 없음)
                     bridge_url = ig_uploader._last_bridge_url
                     if bridge_url and th_uploader.is_configured():
-                        th_success = th_uploader.upload_reel(bridge_url, caption)
+                        topic_tag = generate_topic_tag(caption)
+                        th_success = th_uploader.upload_reel(bridge_url, caption, topic_tag=topic_tag)
                         if th_success:
                             th_count += 1
 
